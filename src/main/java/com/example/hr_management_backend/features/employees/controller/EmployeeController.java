@@ -2,22 +2,19 @@ package com.example.hr_management_backend.features.employees.controller;
 
 import com.example.hr_management_backend.features.employees.model.Employee;
 import com.example.hr_management_backend.features.employees.service.EmployeeService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/employees")
+@RequestMapping({"/api/v1/employees", "/api/employees"})
+@CrossOrigin(origins = "*")
+@RequiredArgsConstructor
 public class EmployeeController {
 
     private final EmployeeService employeeService;
-
-    @Autowired
-    public EmployeeController(EmployeeService employeeService) {
-        this.employeeService = employeeService;
-    }
 
     @PostMapping
     public ResponseEntity<Employee> createEmployee(@RequestBody Employee employee) {

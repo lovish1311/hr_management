@@ -2,22 +2,19 @@ package com.example.hr_management_backend.features.leaves.controller;
 
 import com.example.hr_management_backend.features.leaves.model.LeaveRequest;
 import com.example.hr_management_backend.features.leaves.service.LeaveService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/leaves")
+@RequestMapping({"/api/v1/leaves", "/api/leaves"})
+@CrossOrigin(origins = "*")
+@RequiredArgsConstructor
 public class LeaveController {
 
     private final LeaveService leaveService;
-
-    @Autowired
-    public LeaveController(LeaveService leaveService) {
-        this.leaveService = leaveService;
-    }
 
     @PostMapping("/apply")
     public ResponseEntity<LeaveRequest> applyForLeave(@RequestBody LeaveRequest request) {
