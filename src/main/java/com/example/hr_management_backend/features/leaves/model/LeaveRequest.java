@@ -1,80 +1,59 @@
 package com.example.hr_management_backend.features.leaves.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import lombok.*;
+
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "leave_requests")
+@Table(name = "leave_requests", indexes = {
+    @Index(name = "idx_leave_emp", columnList = "employeeId"),
+    @Index(name = "idx_leave_status", columnList = "status")
+})
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class LeaveRequest {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false)
     private Long employeeId;
+
+    @Column(nullable = false)
     private LocalDate startDate;
+
+    @Column(nullable = false)
     private LocalDate endDate;
+
+    @Builder.Default
+    private String leaveType = "CASUAL"; // CASUAL, SICK, EARNED, UNPAID
+
+    @Builder.Default
+    private Integer totalDays = 1;
+
+
     private String reason;
-    private String status; // PENDING, APPROVED, REJECTED
 
-    public LeaveRequest() {}
+    @Builder.Default
+    private String status = "PENDING"; // PENDING, APPROVED, REJECTED
 
-    public LeaveRequest(Long id, Long employeeId, LocalDate startDate, LocalDate endDate, String reason, String status) {
-        this.id = id;
-        this.employeeId = employeeId;
-        this.startDate = startDate;
-        this.endDate = endDate;
-        this.reason = reason;
-        this.status = status;
-    }
+    private String rejectionReason;
 
-    public Long getId() {
-        return id;
-    }
+    private Long approvedBy; // Employee ID of approving manager/HR
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
 
-    public Long getEmployeeId() {
-        return employeeId;
-    }
-
-    public void setEmployeeId(Long employeeId) {
-        this.employeeId = employeeId;
-    }
-
-    public LocalDate getStartDate() {
-        return startDate;
-    }
-
-    public void setStartDate(LocalDate startDate) {
-        this.startDate = startDate;
-    }
-
-    public LocalDate getEndDate() {
-        return endDate;
-    }
-
-    public void setEndDate(LocalDate endDate) {
-        this.endDate = endDate;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
     }
 }
+

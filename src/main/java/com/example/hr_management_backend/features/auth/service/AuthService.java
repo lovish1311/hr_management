@@ -9,5 +9,7 @@ public interface AuthService {
     LoginResponse login(LoginRequest loginRequest);
     LoginResponse register(RegisterRequest registerRequest);
     User getCurrentUser(String email);
+    User updateUserRole(Long userId, String newRole);
     void logout(String token);
 }
+

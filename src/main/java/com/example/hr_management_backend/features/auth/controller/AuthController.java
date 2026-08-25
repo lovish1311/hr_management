@@ -3,11 +3,13 @@ package com.example.hr_management_backend.features.auth.controller;
 import com.example.hr_management_backend.features.auth.dto.LoginRequest;
 import com.example.hr_management_backend.features.auth.dto.LoginResponse;
 import com.example.hr_management_backend.features.auth.dto.RegisterRequest;
+import com.example.hr_management_backend.features.auth.dto.UpdateRoleDto;
 import com.example.hr_management_backend.features.auth.model.User;
 import com.example.hr_management_backend.features.auth.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -42,9 +44,19 @@ public class AuthController {
         return ResponseEntity.ok(user);
     }
 
+    @PatchMapping("/users/{userId}/role")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<User> updateUserRole(
+            @PathVariable Long userId,
+            @Valid @RequestBody UpdateRoleDto updateRoleDto) {
+        User updated = authService.updateUserRole(userId, updateRoleDto.getRole());
+        return ResponseEntity.ok(updated);
+    }
+
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@RequestHeader(value = "Authorization", required = false) String token) {
         authService.logout(token);
         return ResponseEntity.noContent().build();
     }
 }
+

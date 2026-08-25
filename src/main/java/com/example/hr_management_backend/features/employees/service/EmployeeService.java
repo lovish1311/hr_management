@@ -1,13 +1,19 @@
 package com.example.hr_management_backend.features.employees.service;
 
+import com.example.hr_management_backend.features.employees.dto.EmployeeDetailDto;
+import com.example.hr_management_backend.features.employees.dto.EmployeeSummaryDto;
 import com.example.hr_management_backend.features.employees.model.Employee;
+import org.springframework.data.domain.Page;
+
 import java.util.List;
-import java.util.Optional;
 
 public interface EmployeeService {
     Employee createEmployee(Employee employee);
     Employee updateEmployee(Long id, Employee employee);
-    List<Employee> getAllEmployees();
-    Optional<Employee> getEmployeeById(Long id);
+    List<EmployeeSummaryDto> getAllEmployeesSummary();
+    Page<EmployeeSummaryDto> searchEmployees(String query, String department, int page, int size);
+    EmployeeDetailDto getEmployeeDetail(Long id);
+    EmployeeSummaryDto assignManager(Long employeeId, Long managerId);
     void deleteEmployee(Long id);
 }
+

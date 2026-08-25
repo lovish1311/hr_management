@@ -1,79 +1,66 @@
 package com.example.hr_management_backend.features.employees.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDate;
 
 @Entity
-@Table(name = "employees")
+@Table(name = "employees", indexes = {
+    @Index(name = "idx_employee_code", columnList = "employeeCode"),
+    @Index(name = "idx_employee_dept", columnList = "department"),
+    @Index(name = "idx_employee_manager", columnList = "manager_id")
+})
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Employee {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false)
     private String firstName;
+
+    @Column(nullable = false)
     private String lastName;
+
+    @Column(nullable = false, unique = true)
     private String email;
+
     private String department;
-    private String role;
 
-    public Employee() {}
+    private String designation;
 
-    public Employee(Long id, String firstName, String lastName, String email, String department, String role) {
-        this.id = id;
-        this.firstName = firstName;
-        this.lastName = lastName;
-        this.email = email;
-        this.department = department;
-        this.role = role;
-    }
+    private String role; // e.g. EMPLOYEE, MANAGER, HR, SUPER_ADMIN
 
-    public Long getId() {
-        return id;
-    }
+    @Column(unique = true)
+    private String employeeCode;
 
-    public void setId(Long id) {
-        this.id = id;
-    }
+    private LocalDate joiningDate;
 
-    public String getFirstName() {
-        return firstName;
-    }
+    @Builder.Default
+    private String employmentType = "FULL_TIME"; // FULL_TIME, PART_TIME, CONTRACT, INTERN
 
-    public void setFirstName(String firstName) {
-        this.firstName = firstName;
-    }
+    @Builder.Default
+    private String status = "ACTIVE"; // ACTIVE, PROBATION, ON_LEAVE, TERMINATED
 
-    public String getLastName() {
-        return lastName;
-    }
+    private String phoneNumber;
 
-    public void setLastName(String lastName) {
-        this.lastName = lastName;
-    }
+    private LocalDate dateOfBirth;
 
-    public String getEmail() {
-        return email;
-    }
+    private String gender;
 
-    public void setEmail(String email) {
-        this.email = email;
-    }
+    private String address;
 
-    public String getDepartment() {
-        return department;
-    }
+    private String emergencyContactName;
 
-    public void setDepartment(String department) {
-        this.department = department;
-    }
+    private String emergencyContactPhone;
 
-    public String getRole() {
-        return role;
-    }
-
-    public void setRole(String role) {
-        this.role = role;
-    }
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "manager_id")
+    private Employee manager; // Assigned manager or leave approver
 }
+

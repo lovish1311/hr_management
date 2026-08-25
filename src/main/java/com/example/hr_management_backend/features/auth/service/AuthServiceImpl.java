@@ -93,7 +93,27 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional
+    public User updateUserRole(Long userId, String newRole) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
+
+        String formattedRole = newRole.startsWith("ROLE_") ? newRole : "ROLE_" + newRole;
+        user.setRole(formattedRole);
+
+        if (user.getEmployeeId() != null) {
+            employeeRepository.findById(user.getEmployeeId()).ifPresent(emp -> {
+                emp.setRole(formattedRole.replace("ROLE_", ""));
+                employeeRepository.save(emp);
+            });
+        }
+
+        return userRepository.save(user);
+    }
+
+    @Override
     public void logout(String token) {
         SecurityContextHolder.clearContext();
     }
 }
+
