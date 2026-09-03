@@ -27,6 +27,10 @@ public class SettingsService {
             settingRepository.save(new Setting("companyName", "Default Corp"));
             settingRepository.save(new Setting("workHoursStart", "09:00"));
             settingRepository.save(new Setting("workHoursEnd", "17:00"));
+            settingRepository.save(new Setting("shiftStartTime", "09:00"));
+            settingRepository.save(new Setting("shiftEndTime", "18:00"));
+            settingRepository.save(new Setting("lateArrivalGraceMinutes", "15"));
+            settingRepository.save(new Setting("earlyOutGraceMinutes", "0"));
         }
     }
 
@@ -38,6 +42,13 @@ public class SettingsService {
 
     public void updateSetting(String key, String value) {
         settingRepository.save(new Setting(key, value));
+    }
+
+    public void updateSettingsBatch(Map<String, String> settings) {
+        List<Setting> list = settings.entrySet().stream()
+                .map(e -> new Setting(e.getKey(), e.getValue()))
+                .toList();
+        settingRepository.saveAll(list);
     }
 
     public Map<String, String> getAllSettings() {

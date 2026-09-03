@@ -4,6 +4,7 @@ import com.example.hr_management_backend.features.employees.dto.AssignManagerDto
 import com.example.hr_management_backend.features.employees.dto.EmployeeDetailDto;
 import com.example.hr_management_backend.features.employees.dto.EmployeeSummaryDto;
 import com.example.hr_management_backend.features.employees.model.Employee;
+import com.example.hr_management_backend.features.employees.repository.StarredPeerRepository;
 import com.example.hr_management_backend.features.employees.service.EmployeeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -67,6 +68,50 @@ public class EmployeeController {
             @PathVariable Long id,
             @Valid @RequestBody AssignManagerDto dto) {
         return ResponseEntity.ok(employeeService.assignManager(id, dto.getManagerId()));
+    }
+
+    @PatchMapping("/{id}/permissions")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    public ResponseEntity<EmployeeDetailDto> updatePermissions(
+            @PathVariable Long id,
+            @RequestBody com.example.hr_management_backend.features.employees.dto.UpdatePermissionsDto dto) {
+        return ResponseEntity.ok(employeeService.updatePermissions(
+                id,
+                dto.getIsAttendanceTracked(),
+                dto.getLateArrivalAllowedUntil(),
+                dto.getEarlyOutAllowedAfter()
+        ));
+    }
+
+    private final StarredPeerRepository starredPeerRepository;
+
+    @GetMapping("/starred")
+    public ResponseEntity<List<Long>> getStarredPeers(@RequestParam(defaultValue = "1") Long starrerId) {
+        List<Long> starredIds = starredPeerRepository.findByStarrerEmployeeId(starrerId)
+                .stream()
+                .map(com.example.hr_management_backend.features.employees.model.StarredPeer::getStarredEmployeeId)
+                .toList();
+        return ResponseEntity.ok(starredIds);
+    }
+
+    @PostMapping("/starred/{starredEmployeeId}")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<java.util.Map<String, Object>> toggleStarPeer(
+            @PathVariable Long starredEmployeeId,
+            @RequestParam(defaultValue = "1") Long starrerId) {
+        var existing = starredPeerRepository.findByStarrerEmployeeIdAndStarredEmployeeId(starrerId, starredEmployeeId);
+        boolean isStarred;
+        if (existing.isPresent()) {
+            starredPeerRepository.deleteByStarrerEmployeeIdAndStarredEmployeeId(starrerId, starredEmployeeId);
+            isStarred = false;
+        } else {
+            starredPeerRepository.save(com.example.hr_management_backend.features.employees.model.StarredPeer.builder()
+                    .starrerEmployeeId(starrerId)
+                    .starredEmployeeId(starredEmployeeId)
+                    .build());
+            isStarred = true;
+        }
+        return ResponseEntity.ok(java.util.Map.of("starred", isStarred, "starredEmployeeId", starredEmployeeId));
     }
 
     @DeleteMapping("/{id}")

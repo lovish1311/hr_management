@@ -40,7 +40,13 @@ public class LeaveController {
             @RequestBody Map<String, String> body) {
         String status = body.get("status");
         String rejectionReason = body.get("rejectionReason");
-        Long approverId = body.get("approverId") != null ? Long.parseLong(body.get("approverId")) : null;
+        Long approverId = null;
+        try {
+            String rawId = body.get("approverId");
+            if (rawId != null && !rawId.isBlank()) approverId = Long.parseLong(rawId);
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().build();
+        }
 
         LeaveRequest updated = leaveService.updateStatus(id, status, rejectionReason, approverId);
         return ResponseEntity.ok(updated);
@@ -97,6 +103,21 @@ public class LeaveController {
         int adjustmentDays = ((Number) body.getOrDefault("adjustmentDays", 0)).intValue();
 
         return ResponseEntity.ok(leaveService.adjustEmployeeBalance(employeeId, leaveType, adjustmentDays));
+    }
+
+    @PutMapping("/{id}/withdraw")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    public ResponseEntity<LeaveRequest> withdrawApprovedLeave(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body) {
+        Long actorId = null;
+        try {
+            String rawId = body.get("actorId");
+            if (rawId != null && !rawId.isBlank()) actorId = Long.parseLong(rawId);
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(leaveService.withdrawApprovedLeave(id, actorId));
     }
 }
 

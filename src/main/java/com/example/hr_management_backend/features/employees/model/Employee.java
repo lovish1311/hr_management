@@ -59,6 +59,17 @@ public class Employee {
 
     private String emergencyContactPhone;
 
+    private String biometricName; // Biometric machine alias (e.g. "AbhishekG", "ishu Saini", "Lovish")
+
+    private java.time.LocalTime lateArrivalAllowedUntil; // HR Overpower Standing Exemption e.g. 12:00 PM
+
+    private java.time.LocalTime earlyOutAllowedAfter; // HR Overpower Standing Exemption e.g. 05:00 PM
+
+    @Builder.Default
+    private Boolean isAttendanceTracked = true; // HR toggle to enable/disable attendance tracking
+
+    private String departmentCategory; // Engineering, Sales, Design, Marketing, General
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manager_id")
     private Employee manager; // Assigned manager or leave approver

@@ -28,4 +28,10 @@ public class SettingsController {
         settingsService.updateSetting(key, value);
         return ResponseEntity.ok().build();
     }
+
+    @PutMapping("/batch")
+    public ResponseEntity<Void> updateSettingsBatch(@RequestBody Map<String, String> body) {
+        settingsService.updateSettingsBatch(body);
+        return ResponseEntity.ok().build();
+    }
 }

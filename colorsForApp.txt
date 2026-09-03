@@ -1,0 +1,251 @@
+HR APP THEME COLOR SYSTEM
+==========================
+
+Apply each theme to the WHOLE application, not only the background.
+All backgrounds, sidebar, cards, text, icons, borders, inputs, buttons,
+metric cards, quick actions, tables, badges, shadows and focus states
+must use theme tokens.
+
+SEMANTIC METRIC COLORS:
+- Total Employees = primary
+- Present Today = success
+- On Leave Today = warning
+Do not hard-code purple/green/orange metric cards across all themes.
+
+THEMES
+------
+
+1. OCEAN (recommended default)
+Background: #071A2B -> #064E5B -> #0F766E
+Sidebar: #F8FAFC
+Primary: #0EA5A4
+PrimaryDark: #0F766E
+Secondary: #0284C7
+Accent: #22D3EE
+Card: #FFFFFF
+CardSoft: #ECFEFF
+Text: #0F172A
+TextSecondary: #64748B
+Border: #D7E7EA
+Success: #10B981
+Warning: #F59E0B
+Danger: #EF4444
+Glow: #14B8A640
+
+2. NEBULA
+Background: #070B1F -> #21104A -> #701A75
+Sidebar: #F8FAFC
+Primary: #8B5CF6
+PrimaryDark: #6D28D9
+Secondary: #EC4899
+Accent: #C084FC
+Card: #FFFFFF
+CardSoft: #F5F3FF
+Text: #111827
+TextSecondary: #64748B
+Border: #E9D5FF
+Success: #10B981
+Warning: #F59E0B
+Danger: #EF4444
+Glow: #8B5CF640
+
+3. FIRE
+Background: #170504 -> #571313 -> #9A3412
+Sidebar: #FFFBFA
+Primary: #F97316
+PrimaryDark: #EA580C
+Secondary: #EF4444
+Accent: #FBBF24
+Card: #FFFFFF
+CardSoft: #FFF7ED
+Text: #1C1917
+TextSecondary: #78716C
+Border: #FED7AA
+Success: #10B981
+Warning: #F59E0B
+Danger: #DC2626
+Glow: #F9731640
+
+4. ARCTIC
+Background: #031525 -> #075985 -> #0E7490
+Sidebar: #F8FAFC
+Primary: #06B6D4
+PrimaryDark: #0891B2
+Secondary: #3B82F6
+Accent: #67E8F9
+Card: #FFFFFF
+CardSoft: #ECFEFF
+Text: #0F172A
+TextSecondary: #64748B
+Border: #BAE6FD
+Success: #10B981
+Warning: #F59E0B
+Danger: #EF4444
+Glow: #22D3EE40
+
+5. MIDNIGHT
+Background: #020617 -> #0F172A -> #172554
+Sidebar: #0B1120
+Primary: #3B82F6
+PrimaryDark: #2563EB
+Secondary: #6366F1
+Accent: #60A5FA
+Card: #111827
+CardSoft: #172033
+Text: #F8FAFC
+TextSecondary: #94A3B8
+Border: #263449
+Success: #22C55E
+Warning: #FBBF24
+Danger: #F87171
+Glow: #3B82F640
+
+6. FOREST
+Background: #03140D -> #064E3B -> #047857
+Sidebar: #F7FCF9
+Primary: #10B981
+PrimaryDark: #059669
+Secondary: #16A34A
+Accent: #34D399
+Card: #FFFFFF
+CardSoft: #ECFDF5
+Text: #0F172A
+TextSecondary: #64748B
+Border: #BBF7D0
+Success: #16A34A
+Warning: #F59E0B
+Danger: #EF4444
+Glow: #10B98140
+
+7. ELECTRIC
+Background: #050817 -> #172554 -> #1D4ED8
+Sidebar: #F8FAFC
+Primary: #2563EB
+PrimaryDark: #1D4ED8
+Secondary: #06B6D4
+Accent: #38BDF8
+Card: #FFFFFF
+CardSoft: #EFF6FF
+Text: #0F172A
+TextSecondary: #64748B
+Border: #BFDBFE
+Success: #10B981
+Warning: #F59E0B
+Danger: #EF4444
+Glow: #3B82F640
+
+8. ROYAL
+Background: #0D0618 -> #3B0764 -> #701A75
+Sidebar: #FCFAFF
+Primary: #9333EA
+PrimaryDark: #7E22CE
+Secondary: #C026D3
+Accent: #F59E0B
+Card: #FFFFFF
+CardSoft: #FAF5FF
+Text: #18181B
+TextSecondary: #71717A
+Border: #E9D5FF
+Success: #10B981
+Warning: #F59E0B
+Danger: #EF4444
+Glow: #A855F740
+
+9. OBSIDIAN
+Background: #000000 -> #111111 -> #262626
+Sidebar: #0A0A0A
+Primary: #E5E5E5
+PrimaryDark: #A3A3A3
+Secondary: #737373
+Accent: #FFFFFF
+Card: #171717
+CardSoft: #1F1F1F
+Text: #FAFAFA
+TextSecondary: #A3A3A3
+Border: #303030
+Success: #22C55E
+Warning: #F59E0B
+Danger: #EF4444
+Glow: #FFFFFF20
+
+10. SUNSET
+Background: #180B2B -> #831843 -> #C2410C
+Sidebar: #FFFBFA
+Primary: #F43F5E
+PrimaryDark: #E11D48
+Secondary: #F97316
+Accent: #FBBF24
+Card: #FFFFFF
+CardSoft: #FFF1F2
+Text: #1C1917
+TextSecondary: #78716C
+Border: #FED7AA
+Success: #10B981
+Warning: #F59E0B
+Danger: #E11D48
+Glow: #F43F5E40
+
+11. AURORA
+Background: #04121A -> #064E5B -> #312E81 -> #701A75
+Sidebar: #F8FAFC
+Primary: #14B8A6
+PrimaryDark: #0F766E
+Secondary: #8B5CF6
+Accent: #2DD4BF
+Card: #FFFFFF
+CardSoft: #F0FDFA
+Text: #111827
+TextSecondary: #64748B
+Border: #CCFBF1
+Success: #10B981
+Warning: #F59E0B
+Danger: #EF4444
+Glow: #2DD4BF40
+
+12. CYBER ICE
+Background: #020617 -> #0C4A6E -> #155E75
+Sidebar: #F8FAFC
+Primary: #22D3EE
+PrimaryDark: #0891B2
+Secondary: #6366F1
+Accent: #A5F3FC
+Card: #FFFFFF
+CardSoft: #ECFEFF
+Text: #0F172A
+TextSecondary: #64748B
+Border: #A5F3FC
+Success: #10B981
+Warning: #F59E0B
+Danger: #EF4444
+Glow: #22D3EE50
+
+13. SOLAR
+Background: #160B02 -> #78350F -> #B45309
+Sidebar: #FFFCF5
+Primary: #F59E0B
+PrimaryDark: #D97706
+Secondary: #EA580C
+Accent: #FDE68A
+Card: #FFFFFF
+CardSoft: #FFFBEB
+Text: #1C1917
+TextSecondary: #78716C
+Border: #FDE68A
+Success: #10B981
+Warning: #D97706
+Danger: #EF4444
+Glow: #F59E0B40
+
+IMPLEMENTATION
+--------------
+Create centralized theme tokens, e.g.:
+background, sidebar, primary, primaryDark, secondary, accent,
+card, cardSoft, text, textSecondary, border, success, warning,
+danger, glow.
+
+Every component must consume these tokens. No hard-coded theme-dependent
+colors. Preserve semantic colors (success/warning/danger) while allowing
+their exact shades to vary by theme.
+
+For light themes, use white/off-white surfaces with dark text.
+For dark themes (especially Midnight/Obsidian), use dark cards and light text.

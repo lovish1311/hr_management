@@ -5,6 +5,7 @@ import com.example.hr_management_backend.features.employees.dto.EmployeeSummaryD
 import com.example.hr_management_backend.features.employees.model.Employee;
 import com.example.hr_management_backend.features.employees.repository.EmployeeRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -17,11 +18,22 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.example.hr_management_backend.features.attendance.model.Attendance;
+import com.example.hr_management_backend.features.attendance.repository.AttendanceRepository;
+import com.example.hr_management_backend.features.leaves.repository.LeaveRequestRepository;
+import com.example.hr_management_backend.features.leaves.repository.LeaveBalanceRepository;
+import java.time.LocalDate;
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EmployeeServiceImpl implements EmployeeService {
 
     private final EmployeeRepository employeeRepository;
+    private final AttendanceRepository attendanceRepository;
+    private final LeaveRequestRepository leaveRequestRepository;
+    private final LeaveBalanceRepository leaveBalanceRepository;
 
     @Override
     @Transactional
@@ -53,6 +65,11 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setEmergencyContactPhone(employeeDetails.getEmergencyContactPhone());
         employee.setEmploymentType(employeeDetails.getEmploymentType());
         employee.setStatus(employeeDetails.getStatus());
+        employee.setBiometricName(employeeDetails.getBiometricName());
+        employee.setLateArrivalAllowedUntil(employeeDetails.getLateArrivalAllowedUntil());
+        employee.setEarlyOutAllowedAfter(employeeDetails.getEarlyOutAllowedAfter());
+        employee.setIsAttendanceTracked(employeeDetails.getIsAttendanceTracked() != null ? employeeDetails.getIsAttendanceTracked() : true);
+        employee.setDepartmentCategory(employeeDetails.getDepartmentCategory());
 
         return employeeRepository.save(employee);
     }
@@ -61,7 +78,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Transactional(readOnly = true)
     @Cacheable(value = "employees")
     public List<EmployeeSummaryDto> getAllEmployeesSummary() {
-        return employeeRepository.findAll().stream()
+        return employeeRepository.findByRoleNotIgnoreCase("SUPER_ADMIN").stream()
                 .map(this::mapToSummaryDto)
                 .collect(Collectors.toList());
     }
@@ -74,9 +91,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (query != null && !query.isBlank()) {
             return employeeRepository.searchEmployees(query, pageable).map(this::mapToSummaryDto);
         } else if (department != null && !department.isBlank()) {
-            return employeeRepository.findByDepartment(department, pageable).map(this::mapToSummaryDto);
+            return employeeRepository.findByDepartmentAndRoleNotIgnoreCase(department, "SUPER_ADMIN", pageable).map(this::mapToSummaryDto);
         } else {
-            return employeeRepository.findAll(pageable).map(this::mapToSummaryDto);
+            return employeeRepository.findByRoleNotIgnoreCase("SUPER_ADMIN", pageable).map(this::mapToSummaryDto);
         }
     }
 
@@ -117,8 +134,78 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Override
     @Transactional
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
+    public EmployeeDetailDto updatePermissions(Long employeeId, Boolean isAttendanceTracked, String lateArrivalAllowedUntil, String earlyOutAllowedAfter) {
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
+
+        if (isAttendanceTracked != null) {
+            employee.setIsAttendanceTracked(isAttendanceTracked);
+        }
+
+        if (lateArrivalAllowedUntil != null) {
+            if (lateArrivalAllowedUntil.isBlank() || "CLEAR".equalsIgnoreCase(lateArrivalAllowedUntil)) {
+                employee.setLateArrivalAllowedUntil(null);
+            } else {
+                try {
+                    String timeStr = lateArrivalAllowedUntil.trim();
+                    if (timeStr.length() == 5) timeStr += ":00";
+                    employee.setLateArrivalAllowedUntil(java.time.LocalTime.parse(timeStr));
+                } catch (Exception e) {
+                    log.warn("Could not parse lateArrivalAllowedUntil: {}", lateArrivalAllowedUntil);
+                }
+            }
+        }
+
+        if (earlyOutAllowedAfter != null) {
+            if (earlyOutAllowedAfter.isBlank() || "CLEAR".equalsIgnoreCase(earlyOutAllowedAfter)) {
+                employee.setEarlyOutAllowedAfter(null);
+            } else {
+                try {
+                    String timeStr = earlyOutAllowedAfter.trim();
+                    if (timeStr.length() == 5) timeStr += ":00";
+                    employee.setEarlyOutAllowedAfter(java.time.LocalTime.parse(timeStr));
+                } catch (Exception e) {
+                    log.warn("Could not parse earlyOutAllowedAfter: {}", earlyOutAllowedAfter);
+                }
+            }
+        }
+
+        Employee saved = employeeRepository.save(employee);
+        return mapToDetailDto(saved);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public void deleteEmployee(Long id) {
         employeeRepository.deleteById(id);
+    }
+
+    private String computeTodayStatus(Employee employee) {
+        if (Boolean.FALSE.equals(employee.getIsAttendanceTracked())) {
+            return "EXEMPT";
+        }
+        LocalDate today = LocalDate.now();
+        boolean isOnLeave = leaveRequestRepository.isEmployeeOnApprovedLeave(employee.getId(), today);
+        if (isOnLeave) {
+            return "ON_LEAVE";
+        }
+        Optional<Attendance> att = attendanceRepository.findByEmployeeIdAndDate(employee.getId(), today);
+        if (att.isPresent()) {
+            String s = att.get().getStatus();
+            if ("PRESENT".equalsIgnoreCase(s) || "LATE".equalsIgnoreCase(s) || "ON_LEAVE".equalsIgnoreCase(s)) {
+                return s.toUpperCase();
+            }
+            return "ABSENT";
+        }
+        return "ABSENT";
+    }
+
+    private int computeLeaveBalance(Long employeeId) {
+        int currentYear = LocalDate.now().getYear();
+        return leaveBalanceRepository.findByEmployeeIdAndYear(employeeId, currentYear)
+                .map(lb -> (int) (lb.getCasualLeaveRemaining() + lb.getSickLeaveRemaining() + lb.getEarnedLeaveRemaining()))
+                .orElse(14);
     }
 
     private EmployeeSummaryDto mapToSummaryDto(Employee employee) {
@@ -139,8 +226,16 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .designation(employee.getDesignation())
                 .role(employee.getRole())
                 .status(employee.getStatus())
+                .phoneNumber(employee.getPhoneNumber())
+                .joiningDate(employee.getJoiningDate())
+                .isAttendanceTracked(employee.getIsAttendanceTracked() != null ? employee.getIsAttendanceTracked() : true)
+                .departmentCategory(employee.getDepartmentCategory())
+                .lateArrivalAllowedUntil(employee.getLateArrivalAllowedUntil())
+                .earlyOutAllowedAfter(employee.getEarlyOutAllowedAfter())
                 .managerId(managerId)
                 .managerName(managerName)
+                .todayAttendanceStatus(computeTodayStatus(employee))
+                .leaveBalance(computeLeaveBalance(employee.getId()))
                 .build();
     }
 
@@ -170,8 +265,15 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .address(employee.getAddress())
                 .emergencyContactName(employee.getEmergencyContactName())
                 .emergencyContactPhone(employee.getEmergencyContactPhone())
+                .biometricName(employee.getBiometricName())
+                .lateArrivalAllowedUntil(employee.getLateArrivalAllowedUntil())
+                .earlyOutAllowedAfter(employee.getEarlyOutAllowedAfter())
+                .isAttendanceTracked(employee.getIsAttendanceTracked() != null ? employee.getIsAttendanceTracked() : true)
+                .departmentCategory(employee.getDepartmentCategory())
                 .managerId(managerId)
                 .managerName(managerName)
+                .todayAttendanceStatus(computeTodayStatus(employee))
+                .leaveBalance(computeLeaveBalance(employee.getId()))
                 .build();
     }
 }

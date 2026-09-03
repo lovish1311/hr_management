@@ -19,6 +19,7 @@ public class Attendance {
     private LocalTime checkInTime;
     private LocalTime checkOutTime;
     private String status; // PRESENT, ABSENT, LATE
+    private Integer totalWorkingMinutes;
 
     public Attendance() {}
 
@@ -77,5 +78,13 @@ public class Attendance {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Integer getTotalWorkingMinutes() {
+        return totalWorkingMinutes;
+    }
+
+    public void setTotalWorkingMinutes(Integer totalWorkingMinutes) {
+        this.totalWorkingMinutes = totalWorkingMinutes;
     }
 }

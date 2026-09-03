@@ -29,6 +29,13 @@ public class EmployeeDetailDto {
     private String address;
     private String emergencyContactName;
     private String emergencyContactPhone;
+    private String biometricName;
+    private java.time.LocalTime lateArrivalAllowedUntil;
+    private java.time.LocalTime earlyOutAllowedAfter;
+    private Boolean isAttendanceTracked;
+    private String departmentCategory;
     private Long managerId;
     private String managerName;
+    private String todayAttendanceStatus; // e.g. PRESENT, LATE, ABSENT, ON_LEAVE, EXEMPT
+    private Integer leaveBalance;
 }

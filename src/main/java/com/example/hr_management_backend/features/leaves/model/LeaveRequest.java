@@ -5,6 +5,7 @@ import lombok.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 @Entity
 @Table(name = "leave_requests", indexes = {
@@ -34,8 +35,15 @@ public class LeaveRequest {
     private String leaveType = "CASUAL"; // CASUAL, SICK, EARNED, UNPAID
 
     @Builder.Default
-    private Integer totalDays = 1;
+    private Double totalDays = 1.0;
 
+    @com.fasterxml.jackson.annotation.JsonProperty("fromSession")
+    @Column(name = "start_session")
+    private String startSession;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("toSession")
+    @Column(name = "end_session")
+    private String endSession;
 
     private String reason;
 
@@ -45,6 +53,21 @@ public class LeaveRequest {
     private String rejectionReason;
 
     private Long approvedBy; // Employee ID of approving manager/HR
+
+    @Column(name = "start_time")
+    private LocalTime startTime;
+
+    @Column(name = "end_time")
+    private LocalTime endTime;
+
+    @Column(name = "document_url")
+    private String documentUrl;
+
+    @Column(name = "cc_emails")
+    private String ccEmails;
+
+    @Column(name = "policy_snapshot", columnDefinition = "TEXT")
+    private String policySnapshot;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

@@ -14,6 +14,7 @@ public interface EmployeeService {
     Page<EmployeeSummaryDto> searchEmployees(String query, String department, int page, int size);
     EmployeeDetailDto getEmployeeDetail(Long id);
     EmployeeSummaryDto assignManager(Long employeeId, Long managerId);
+    EmployeeDetailDto updatePermissions(Long employeeId, Boolean isAttendanceTracked, String lateArrivalAllowedUntil, String earlyOutAllowedAfter);
     void deleteEmployee(Long id);
 }
 

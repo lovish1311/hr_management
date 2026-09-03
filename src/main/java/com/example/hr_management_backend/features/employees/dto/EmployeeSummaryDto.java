@@ -19,6 +19,14 @@ public class EmployeeSummaryDto {
     private String designation;
     private String role;
     private String status;
+    private String phoneNumber;
+    private java.time.LocalDate joiningDate;
+    private Boolean isAttendanceTracked;
+    private String departmentCategory;
+    private java.time.LocalTime lateArrivalAllowedUntil;
+    private java.time.LocalTime earlyOutAllowedAfter;
     private Long managerId;
     private String managerName;
+    private String todayAttendanceStatus; // e.g. PRESENT, LATE, ABSENT, ON_LEAVE, EXEMPT
+    private Integer leaveBalance;
 }

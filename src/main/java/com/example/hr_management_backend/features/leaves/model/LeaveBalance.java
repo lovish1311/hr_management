@@ -5,7 +5,7 @@ import lombok.*;
 
 @Entity
 @Table(name = "leave_balances", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"employeeId", "year"})
+    @UniqueConstraint(columnNames = {"employeeId", "\"year\""})
 })
 @Data
 @NoArgsConstructor
@@ -20,46 +20,46 @@ public class LeaveBalance {
     @Column(nullable = false)
     private Long employeeId;
 
-    @Column(nullable = false)
+    @Column(name = "\"year\"", nullable = false)
     private Integer year;
 
     @Builder.Default
-    private Integer casualLeaveQuota = 12;
+    private Double casualLeaveQuota = 12.0;
 
     @Builder.Default
-    private Integer casualLeaveUsed = 0;
+    private Double casualLeaveUsed = 0.0;
 
     @Builder.Default
-    private Integer sickLeaveQuota = 10;
+    private Double sickLeaveQuota = 10.0;
 
     @Builder.Default
-    private Integer sickLeaveUsed = 0;
+    private Double sickLeaveUsed = 0.0;
 
     @Builder.Default
-    private Integer earnedLeaveQuota = 15;
+    private Double earnedLeaveQuota = 15.0;
 
     @Builder.Default
-    private Integer earnedLeaveUsed = 0;
+    private Double earnedLeaveUsed = 0.0;
 
     @Builder.Default
-    private Integer workFromHomeQuota = 0;
+    private Double workFromHomeQuota = 0.0;
 
     @Builder.Default
-    private Integer workFromHomeUsed = 0;
+    private Double workFromHomeUsed = 0.0;
 
-    public int getCasualLeaveRemaining() {
-        return casualLeaveQuota - casualLeaveUsed;
+    public double getCasualLeaveRemaining() {
+        return (casualLeaveQuota != null ? casualLeaveQuota : 12.0) - (casualLeaveUsed != null ? casualLeaveUsed : 0.0);
     }
 
-    public int getSickLeaveRemaining() {
-        return sickLeaveQuota - sickLeaveUsed;
+    public double getSickLeaveRemaining() {
+        return (sickLeaveQuota != null ? sickLeaveQuota : 10.0) - (sickLeaveUsed != null ? sickLeaveUsed : 0.0);
     }
 
-    public int getEarnedLeaveRemaining() {
-        return earnedLeaveQuota - earnedLeaveUsed;
+    public double getEarnedLeaveRemaining() {
+        return (earnedLeaveQuota != null ? earnedLeaveQuota : 15.0) - (earnedLeaveUsed != null ? earnedLeaveUsed : 0.0);
     }
 
-    public int getWorkFromHomeRemaining() {
-        return workFromHomeQuota - workFromHomeUsed; // Will naturally go into negatives
+    public double getWorkFromHomeRemaining() {
+        return (workFromHomeQuota != null ? workFromHomeQuota : 0.0) - (workFromHomeUsed != null ? workFromHomeUsed : 0.0);
     }
 }
