@@ -1,0 +1,16 @@
+{
+  "name": "hr-management-playwright-tests",
+  "version": "1.0.0",
+  "description": "Playwright end-to-end and API test suite for HR Management leave policy validation",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.1",
+    "@types/node": "^20.11.24",
+    "typescript": "^5.3.3"
+  }
+}

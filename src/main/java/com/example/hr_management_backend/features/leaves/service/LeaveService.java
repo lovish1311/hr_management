@@ -59,12 +59,12 @@ public class LeaveService {
 
     /**
      * Fetches or creates a leave balance for the given employee and year.
-     * NOTE: NOT cached — this is a write-capable orchestrator called within
-     * PESSIMISTIC_WRITE transaction contexts. Caching here would bypass the DB lock.
+     * Computes real-time pending leave requests to ensure `getCasualLeaveRemaining()`
+     * dynamically decrements immediately when a leave application is submitted.
      */
     @Transactional
     public LeaveBalance getOrCreateLeaveBalance(Long employeeId, Integer year) {
-        return leaveBalanceRepository.findByEmployeeIdAndYear(employeeId, year)
+        LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYear(employeeId, year)
                 .orElseGet(() -> {
                     LeaveBalance initial = LeaveBalance.builder()
                             .employeeId(employeeId)
@@ -78,9 +78,22 @@ public class LeaveService {
                             .build();
                     return leaveBalanceRepository.save(initial);
                 });
+
+        Double pendingCasual = leaveRequestRepository.sumPendingLeaves(employeeId, "CASUAL", year);
+        Double pendingSick = leaveRequestRepository.sumPendingLeaves(employeeId, "SICK", year);
+        Double pendingEarned = leaveRequestRepository.sumPendingLeaves(employeeId, "EARNED", year);
+        Double pendingWfh = leaveRequestRepository.sumPendingLeaves(employeeId, "WORK_FROM_HOME", year);
+
+        balance.setCasualLeavePending(pendingCasual != null ? pendingCasual : 0.0);
+        balance.setSickLeavePending(pendingSick != null ? pendingSick : 0.0);
+        balance.setEarnedLeavePending(pendingEarned != null ? pendingEarned : 0.0);
+        balance.setWorkFromHomePending(pendingWfh != null ? pendingWfh : 0.0);
+
+        return balance;
     }
 
     @Transactional
+    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
     public LeaveRequest applyForLeave(LeaveRequest request) {
         request.setId(null);
         request.setStatus("PENDING");
@@ -146,12 +159,11 @@ public class LeaveService {
                 }
             }
 
-            // Deduct on Submit: Subtract sum of all PENDING requests for this leave type
-            Double pendingAmount = leaveRequestRepository.sumPendingLeaves(request.getEmployeeId(), reqType, currentYear);
-            double effectiveAvailable = remaining - (pendingAmount != null ? pendingAmount : 0.0);
-
-            if (!"UNPAID".equals(reqType) && !"WORK_FROM_HOME".equals(reqType) && daysToApply > effectiveAvailable) {
-                throw new IllegalStateException("Insufficient leave balance (including pending requests). Effective Available: " + Math.max(0.0, effectiveAvailable) + " days.");
+            // getCasualLeaveRemaining() / getSickLeaveRemaining() / getEarnedLeaveRemaining()
+            // already subtract pending leaves (set in getOrCreateLeaveBalance).
+            // So `remaining` here is already the EFFECTIVE available balance.
+            if (daysToApply > remaining) {
+                throw new IllegalStateException("Insufficient leave balance (including pending requests). Effective Available: " + Math.max(0.0, remaining) + " days.");
             }
         } else {
             // Enforce admin-configured time-off policies for short breaks and early outs

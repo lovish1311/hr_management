@@ -30,7 +30,11 @@ public class LeaveController {
             @PathVariable Long employeeId,
             @RequestParam(required = false) Integer year) {
         int activeYear = (year != null) ? year : Year.now().getValue();
-        return ResponseEntity.ok(leaveService.getOrCreateLeaveBalance(employeeId, activeYear));
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+                .header("Pragma", "no-cache")
+                .header("Expires", "0")
+                .body(leaveService.getOrCreateLeaveBalance(employeeId, activeYear));
     }
 
     @PutMapping("/{id}/status")

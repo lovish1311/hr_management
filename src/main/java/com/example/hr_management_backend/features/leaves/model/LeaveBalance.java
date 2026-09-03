@@ -47,19 +47,47 @@ public class LeaveBalance {
     @Builder.Default
     private Double workFromHomeUsed = 0.0;
 
+    @Transient
+    @Builder.Default
+    private Double casualLeavePending = 0.0;
+
+    @Transient
+    @Builder.Default
+    private Double sickLeavePending = 0.0;
+
+    @Transient
+    @Builder.Default
+    private Double earnedLeavePending = 0.0;
+
+    @Transient
+    @Builder.Default
+    private Double workFromHomePending = 0.0;
+
     public double getCasualLeaveRemaining() {
-        return (casualLeaveQuota != null ? casualLeaveQuota : 12.0) - (casualLeaveUsed != null ? casualLeaveUsed : 0.0);
+        double quota = casualLeaveQuota != null ? casualLeaveQuota : 12.0;
+        double used = casualLeaveUsed != null ? casualLeaveUsed : 0.0;
+        double pending = casualLeavePending != null ? casualLeavePending : 0.0;
+        return Math.max(0.0, quota - used - pending);
     }
 
     public double getSickLeaveRemaining() {
-        return (sickLeaveQuota != null ? sickLeaveQuota : 10.0) - (sickLeaveUsed != null ? sickLeaveUsed : 0.0);
+        double quota = sickLeaveQuota != null ? sickLeaveQuota : 10.0;
+        double used = sickLeaveUsed != null ? sickLeaveUsed : 0.0;
+        double pending = sickLeavePending != null ? sickLeavePending : 0.0;
+        return Math.max(0.0, quota - used - pending);
     }
 
     public double getEarnedLeaveRemaining() {
-        return (earnedLeaveQuota != null ? earnedLeaveQuota : 15.0) - (earnedLeaveUsed != null ? earnedLeaveUsed : 0.0);
+        double quota = earnedLeaveQuota != null ? earnedLeaveQuota : 15.0;
+        double used = earnedLeaveUsed != null ? earnedLeaveUsed : 0.0;
+        double pending = earnedLeavePending != null ? earnedLeavePending : 0.0;
+        return Math.max(0.0, quota - used - pending);
     }
 
     public double getWorkFromHomeRemaining() {
-        return (workFromHomeQuota != null ? workFromHomeQuota : 0.0) - (workFromHomeUsed != null ? workFromHomeUsed : 0.0);
+        double quota = workFromHomeQuota != null ? workFromHomeQuota : 0.0;
+        double used = workFromHomeUsed != null ? workFromHomeUsed : 0.0;
+        double pending = workFromHomePending != null ? workFromHomePending : 0.0;
+        return Math.max(0.0, quota - used - pending);
     }
 }
