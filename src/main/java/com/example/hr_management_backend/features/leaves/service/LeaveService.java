@@ -10,6 +10,8 @@ import com.example.hr_management_backend.features.leaves.model.LeaveRequest;
 import com.example.hr_management_backend.features.leaves.repository.EmployeeLeaveQuotaRepository;
 import com.example.hr_management_backend.features.leaves.repository.LeaveBalanceRepository;
 import com.example.hr_management_backend.features.leaves.repository.LeaveRequestRepository;
+import com.example.hr_management_backend.features.attendance.model.Attendance;
+import com.example.hr_management_backend.features.attendance.repository.AttendanceRepository;
 import com.example.hr_management_backend.features.settings.service.SettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +36,7 @@ public class LeaveService {
     private final LeaveBalanceRepository leaveBalanceRepository;
     private final EmployeeLeaveQuotaRepository employeeLeaveQuotaRepository;
     private final EmployeeRepository employeeRepository;
+    private final AttendanceRepository attendanceRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final SettingsService settingsService;
     private String capturePolicySnapshot() {
@@ -151,9 +154,11 @@ public class LeaveService {
                     remaining = specialQuota.get().getRemaining();
                 } else {
                     LeaveBalance balance = getOrCreateLeaveBalance(request.getEmployeeId(), currentYear);
-                    remaining = switch (reqType) {
+                    String normType = reqType.replaceAll("_LEAVE$", "");
+                    remaining = switch (normType) {
                         case "SICK" -> balance.getSickLeaveRemaining();
                         case "EARNED" -> balance.getEarnedLeaveRemaining();
+                        case "WORK_FROM_HOME", "WFH" -> balance.getWorkFromHomeRemaining();
                         default -> balance.getCasualLeaveRemaining();
                     };
                 }
@@ -211,7 +216,8 @@ public class LeaveService {
                 LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYearForUpdate(request.getEmployeeId(), year)
                         .orElseGet(() -> getOrCreateLeaveBalance(request.getEmployeeId(), year));
 
-                switch (reqType) {
+                String normType = reqType.replaceAll("_LEAVE$", "");
+                switch (normType) {
                     case "SICK" -> {
                         if (balance.getSickLeaveRemaining() < requestedDays) {
                             throw new IllegalStateException("Cannot approve: Insufficient sick leave balance.");
@@ -224,7 +230,7 @@ public class LeaveService {
                         }
                         balance.setEarnedLeaveUsed(balance.getEarnedLeaveUsed() + requestedDays);
                     }
-                    case "WORK_FROM_HOME" -> {
+                    case "WORK_FROM_HOME", "WFH" -> {
                         balance.setWorkFromHomeUsed(balance.getWorkFromHomeUsed() + requestedDays);
                     }
                     case "UNPAID" -> log.info("Unpaid leave approved for employeeId={}", request.getEmployeeId());
@@ -339,7 +345,8 @@ public class LeaveService {
                 .orElseGet(() -> getOrCreateLeaveBalance(request.getEmployeeId(), year));
 
         if (!isTimeBased) {
-            switch (request.getLeaveType().toUpperCase()) {
+            String normType = request.getLeaveType().toUpperCase().replaceAll("_LEAVE$", "");
+            switch (normType) {
                 case "SICK" -> {
                     if (balance.getSickLeaveRemaining() < daysToApply) {
                         throw new IllegalStateException("Cannot apply: Insufficient sick leave balance for employee.");
@@ -352,7 +359,7 @@ public class LeaveService {
                     }
                     balance.setEarnedLeaveUsed(balance.getEarnedLeaveUsed() + daysToApply);
                 }
-                case "WORK_FROM_HOME" -> balance.setWorkFromHomeUsed(balance.getWorkFromHomeUsed() + daysToApply);
+                case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(balance.getWorkFromHomeUsed() + daysToApply);
                 case "UNPAID" -> log.info("Unpaid leave applied on behalf for employeeId={}", request.getEmployeeId());
                 default -> {
                     if (balance.getCasualLeaveRemaining() < daysToApply) {
@@ -406,10 +413,11 @@ public class LeaveService {
                 LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYearForUpdate(request.getEmployeeId(), year)
                         .orElseThrow(() -> new RuntimeException("Leave balance not found for employee: " + request.getEmployeeId()));
 
-                switch (type) {
+                String normType = type.replaceAll("_LEAVE$", "");
+                switch (normType) {
                     case "SICK" -> balance.setSickLeaveUsed(Math.max(0, balance.getSickLeaveUsed() - daysToCredit));
                     case "EARNED" -> balance.setEarnedLeaveUsed(Math.max(0, balance.getEarnedLeaveUsed() - daysToCredit));
-                    case "WORK_FROM_HOME" -> balance.setWorkFromHomeUsed(Math.max(0, balance.getWorkFromHomeUsed() - daysToCredit));
+                    case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0, balance.getWorkFromHomeUsed() - daysToCredit));
                     case "UNPAID" -> log.info("Unpaid leave withdrawn — no balance change for employeeId={}", request.getEmployeeId());
                     default -> balance.setCasualLeaveUsed(Math.max(0, balance.getCasualLeaveUsed() - daysToCredit));
                 }
@@ -690,5 +698,60 @@ public class LeaveService {
         } catch (NumberFormatException e) {
             return defaultValue;
         }
+    }
+
+    @Transactional
+    public void clearAllLeaveData() {
+        leaveRequestRepository.deleteAllInBatch();
+
+        List<LeaveBalance> balances = leaveBalanceRepository.findAll();
+        for (LeaveBalance b : balances) {
+            b.setCasualLeaveUsed(0.0);
+            b.setSickLeaveUsed(0.0);
+            b.setEarnedLeaveUsed(0.0);
+            b.setWorkFromHomeUsed(0.0);
+        }
+        leaveBalanceRepository.saveAll(balances);
+
+        List<EmployeeLeaveQuota> quotas = employeeLeaveQuotaRepository.findAll();
+        for (EmployeeLeaveQuota q : quotas) {
+            q.setUsed(0.0);
+        }
+        employeeLeaveQuotaRepository.saveAll(quotas);
+
+        List<Attendance> attendances = attendanceRepository.findAll();
+        List<Attendance> leaveAttendances = attendances.stream()
+                .filter(a -> "ON_LEAVE".equalsIgnoreCase(a.getStatus()) || "HALF_DAY_LEAVE".equalsIgnoreCase(a.getStatus()))
+                .toList();
+        attendanceRepository.deleteAllInBatch(leaveAttendances);
+        log.info("Cleared ALL leave requests, reset all balances and leave attendance records.");
+    }
+
+    @Transactional
+    public void clearEmployeeLeaveData(Long employeeId) {
+        List<LeaveRequest> empRequests = leaveRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId);
+        leaveRequestRepository.deleteAllInBatch(empRequests);
+
+        List<LeaveBalance> balances = leaveBalanceRepository.findByEmployeeId(employeeId);
+        for (LeaveBalance b : balances) {
+            b.setCasualLeaveUsed(0.0);
+            b.setSickLeaveUsed(0.0);
+            b.setEarnedLeaveUsed(0.0);
+            b.setWorkFromHomeUsed(0.0);
+        }
+        leaveBalanceRepository.saveAll(balances);
+
+        List<EmployeeLeaveQuota> quotas = employeeLeaveQuotaRepository.findByEmployeeIdAndYear(employeeId, java.time.Year.now().getValue());
+        for (EmployeeLeaveQuota q : quotas) {
+            q.setUsed(0.0);
+        }
+        employeeLeaveQuotaRepository.saveAll(quotas);
+
+        List<Attendance> attendances = attendanceRepository.findByEmployeeId(employeeId);
+        List<Attendance> leaveAttendances = attendances.stream()
+                .filter(a -> "ON_LEAVE".equalsIgnoreCase(a.getStatus()) || "HALF_DAY_LEAVE".equalsIgnoreCase(a.getStatus()))
+                .toList();
+        attendanceRepository.deleteAllInBatch(leaveAttendances);
+        log.info("Cleared leave requests and reset balances for employeeId={}", employeeId);
     }
 }

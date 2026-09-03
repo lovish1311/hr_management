@@ -123,5 +123,17 @@ public class LeaveController {
         }
         return ResponseEntity.ok(leaveService.withdrawApprovedLeave(id, actorId));
     }
+
+    @DeleteMapping("/clear/all")
+    public ResponseEntity<Map<String, String>> clearAllLeaveData() {
+        leaveService.clearAllLeaveData();
+        return ResponseEntity.ok(Map.of("message", "All leave requests, permissions, short breaks, and balances cleared successfully across all employees."));
+    }
+
+    @DeleteMapping("/clear/employee/{employeeId}")
+    public ResponseEntity<Map<String, String>> clearEmployeeLeaveData(@PathVariable Long employeeId) {
+        leaveService.clearEmployeeLeaveData(employeeId);
+        return ResponseEntity.ok(Map.of("message", "All leave requests, permissions, short breaks, and balance reset successfully for employee ID " + employeeId));
+    }
 }
 

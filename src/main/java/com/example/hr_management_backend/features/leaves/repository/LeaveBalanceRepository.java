@@ -14,6 +14,7 @@ import java.util.Optional;
 public interface LeaveBalanceRepository extends JpaRepository<LeaveBalance, Long> {
 
     Optional<LeaveBalance> findByEmployeeIdAndYear(Long employeeId, Integer year);
+    java.util.List<LeaveBalance> findByEmployeeId(Long employeeId);
 
     /**
      * Pessimistic Write Lock query to prevent concurrent leave balance deduction race conditions.

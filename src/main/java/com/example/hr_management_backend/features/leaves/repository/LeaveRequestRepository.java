@@ -12,6 +12,7 @@ import java.util.List;
 @Repository
 public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long> {
     List<LeaveRequest> findByEmployeeIdOrderByCreatedAtDesc(Long employeeId);
+    void deleteByEmployeeId(Long employeeId);
 
     List<LeaveRequest> findByStatusOrderByCreatedAtDesc(String status);
 
@@ -82,7 +83,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
      * Used for "Deduct on Submit" validation.
      */
     @Query("SELECT COALESCE(SUM(lr.totalDays), 0.0) FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
-           "AND lr.status = 'PENDING' AND UPPER(lr.leaveType) = UPPER(:leaveType) AND EXTRACT(YEAR FROM lr.startDate) = :year")
+           "AND lr.status = 'PENDING' AND (UPPER(lr.leaveType) = UPPER(:leaveType) OR UPPER(lr.leaveType) = UPPER(CONCAT(:leaveType, '_LEAVE')) OR UPPER(lr.leaveType) = UPPER(REPLACE(:leaveType, '_LEAVE', ''))) AND EXTRACT(YEAR FROM lr.startDate) = :year")
     Double sumPendingLeaves(@Param("employeeId") Long employeeId,
                             @Param("leaveType") String leaveType,
                             @Param("year") int year);
