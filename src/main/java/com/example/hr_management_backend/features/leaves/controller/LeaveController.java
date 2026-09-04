@@ -38,7 +38,7 @@ public class LeaveController {
     }
 
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<LeaveRequest> updateStatus(
             @PathVariable Long id,
             @RequestBody Map<String, String> body) {
@@ -62,14 +62,14 @@ public class LeaveController {
     }
 
     @GetMapping("/pending/manager/{managerId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER')")
-    public ResponseEntity<List<LeaveRequest>> getPendingForManager(@PathVariable Long managerId) {
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
+    public ResponseEntity<List<com.example.hr_management_backend.features.leaves.dto.LeaveRequestDto>> getPendingForManager(@PathVariable Long managerId) {
         return ResponseEntity.ok(leaveService.getPendingForManager(managerId));
     }
 
     @GetMapping("/pending/all")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
-    public ResponseEntity<List<LeaveRequest>> getAllPendingRequests() {
+    public ResponseEntity<List<com.example.hr_management_backend.features.leaves.dto.LeaveRequestDto>> getAllPendingRequests() {
         return ResponseEntity.ok(leaveService.getAllPendingRequests());
     }
 

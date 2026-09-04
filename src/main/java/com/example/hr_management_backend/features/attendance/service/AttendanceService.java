@@ -610,12 +610,24 @@ public class AttendanceService {
                         status = "LATE";
                         statusLabel = "Late Arrival (" + formatTime(firstIn) + ")";
                     } else {
-                        presentCount++;
-                        status = "PRESENT";
-                        if (matched.getLateArrivalAllowedUntil() != null && firstIn.isAfter(lateCutoff)) {
-                            statusLabel = "Present (Late Exemption Granted)";
+                        LocalTime effectiveEarlyCutoff = (matched != null && matched.getEarlyOutAllowedAfter() != null)
+                                ? matched.getEarlyOutAllowedAfter()
+                                : getUniversalEarlyCutoff();
+                        
+                        if (lastOut != null && lastOut.isBefore(effectiveEarlyCutoff)) {
+                            lateCount++;
+                            status = "LATE";
+                            statusLabel = "Left Early (" + formatTime(lastOut) + ")";
                         } else {
-                            statusLabel = "Present (" + formatTime(firstIn) + ")";
+                            presentCount++;
+                            status = "PRESENT";
+                            if (matched != null && matched.getLateArrivalAllowedUntil() != null && firstIn.isAfter(lateCutoff)) {
+                                statusLabel = "Present (Late Exemption Granted)";
+                            } else if (matched != null && matched.getEarlyOutAllowedAfter() != null && lastOut != null && lastOut.isBefore(getUniversalEarlyCutoff())) {
+                                statusLabel = "Present (Early Out Exemption Granted)";
+                            } else {
+                                statusLabel = "Present (" + formatTime(firstIn) + ")";
+                            }
                         }
                     }
                 }

@@ -4,6 +4,7 @@ import com.example.hr_management_backend.features.employees.model.Employee;
 import com.example.hr_management_backend.features.employees.repository.EmployeeRepository;
 import com.example.hr_management_backend.features.leaves.event.LeaveApprovedEvent;
 import com.example.hr_management_backend.features.leaves.event.LeaveWithdrawnEvent;
+import com.example.hr_management_backend.features.leaves.dto.LeaveRequestDto;
 import com.example.hr_management_backend.features.leaves.model.EmployeeLeaveQuota;
 import com.example.hr_management_backend.features.leaves.model.LeaveBalance;
 import com.example.hr_management_backend.features.leaves.model.LeaveRequest;
@@ -289,9 +290,24 @@ public class LeaveService {
                     saved.getEndDate(),
                     saved.getLeaveType()
             ));
+        } else if ("REJECTED".equalsIgnoreCase(saved.getStatus()) && "APPROVED".equalsIgnoreCase(previousStatus)) {
+            eventPublisher.publishEvent(new LeaveWithdrawnEvent(
+                    saved.getEmployeeId(),
+                    saved.getStartDate(),
+                    saved.getEndDate(),
+                    saved.getLeaveType()
+            ));
         }
 
         return saved;
+    }
+
+    @Transactional(readOnly = true)
+    public List<LeaveRequestDto> getLeavesByEmployeeDto(Long employeeId) {
+        List<LeaveRequest> requests = leaveRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId);
+        java.util.Map<Long, Employee> empMap = employeeRepository.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
+        return requests.stream().map(req -> mapToDto(req, empMap)).toList();
     }
 
     @Transactional(readOnly = true)
@@ -300,13 +316,57 @@ public class LeaveService {
     }
 
     @Transactional(readOnly = true)
-    public List<LeaveRequest> getPendingForManager(Long managerId) {
-        return leaveRequestRepository.findPendingForManager(managerId);
+    public List<LeaveRequestDto> getPendingForManager(Long managerId) {
+        List<LeaveRequest> requests = leaveRequestRepository.findPendingForManager(managerId);
+        java.util.Map<Long, Employee> empMap = employeeRepository.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
+        return requests.stream().map(req -> mapToDto(req, empMap)).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<LeaveRequest> getAllPendingRequests() {
-        return leaveRequestRepository.findByStatusOrderByCreatedAtDesc("PENDING");
+    public List<LeaveRequestDto> getAllPendingRequests() {
+        List<LeaveRequest> requests = leaveRequestRepository.findByStatusOrderByCreatedAtDesc("PENDING");
+        java.util.Map<Long, Employee> empMap = employeeRepository.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
+        return requests.stream().map(req -> mapToDto(req, empMap)).toList();
+    }
+
+    public LeaveRequestDto mapToDto(LeaveRequest req, java.util.Map<Long, Employee> empMap) {
+        Employee emp = empMap != null ? empMap.get(req.getEmployeeId()) : null;
+        String empName = (emp != null) ? (emp.getFirstName() + " " + emp.getLastName()) : "Employee #" + req.getEmployeeId();
+        String empEmail = (emp != null) ? emp.getEmail() : "";
+        String empDept = (emp != null) ? emp.getDepartmentCategory() : "General";
+        String empDesig = (emp != null) ? emp.getDesignation() : "Employee";
+
+        Employee approver = (req.getApprovedBy() != null && empMap != null) ? empMap.get(req.getApprovedBy()) : null;
+        String approverName = (approver != null) ? (approver.getFirstName() + " " + approver.getLastName()) : null;
+
+        return com.example.hr_management_backend.features.leaves.dto.LeaveRequestDto.builder()
+                .id(req.getId())
+                .employeeId(req.getEmployeeId())
+                .employeeName(empName)
+                .employeeEmail(empEmail)
+                .employeeDepartment(empDept)
+                .employeeDesignation(empDesig)
+                .startDate(req.getStartDate())
+                .endDate(req.getEndDate())
+                .leaveType(req.getLeaveType())
+                .totalDays(req.getTotalDays())
+                .isTimeBased(req.getIsTimeBased())
+                .startSession(req.getStartSession())
+                .endSession(req.getEndSession())
+                .reason(req.getReason())
+                .status(req.getStatus())
+                .rejectionReason(req.getRejectionReason())
+                .approvedBy(req.getApprovedBy())
+                .approverName(approverName)
+                .startTime(req.getStartTime())
+                .endTime(req.getEndTime())
+                .documentUrl(req.getDocumentUrl())
+                .ccEmails(req.getCcEmails())
+                .policySnapshot(req.getPolicySnapshot())
+                .createdAt(req.getCreatedAt())
+                .build();
     }
 
     @Transactional(readOnly = true)
