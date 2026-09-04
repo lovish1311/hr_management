@@ -31,6 +31,12 @@ public class SettingsService {
             settingRepository.save(new Setting("shiftEndTime", "18:00"));
             settingRepository.save(new Setting("lateArrivalGraceMinutes", "15"));
             settingRepository.save(new Setting("earlyOutGraceMinutes", "0"));
+            settingRepository.save(new Setting("time_off_policy_mode", "UNITWISE"));
+            settingRepository.save(new Setting("time_off_cycle", "Monthly"));
+            settingRepository.save(new Setting("time_off_short_break_unit_limit", "2"));
+            settingRepository.save(new Setting("time_off_early_out_unit_limit", "2"));
+            settingRepository.save(new Setting("time_off_late_arrival_unit_limit", "2"));
+            settingRepository.save(new Setting("time_off_hourly_limit", "4"));
         }
     }
 

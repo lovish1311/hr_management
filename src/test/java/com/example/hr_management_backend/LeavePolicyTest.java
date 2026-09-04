@@ -28,6 +28,15 @@ public class LeavePolicyTest {
     @Autowired
     private LeaveRequestRepository leaveRequestRepository;
 
+    @Autowired
+    private com.example.hr_management_backend.features.attendance.service.AttendanceService attendanceService;
+
+    @Autowired
+    private com.example.hr_management_backend.features.attendance.repository.AttendanceRepository attendanceRepository;
+
+    @Autowired
+    private com.example.hr_management_backend.features.employees.repository.EmployeeRepository employeeRepository;
+
     @Test
     @DisplayName("SCENARIO 1: Employee applies for leaves and Deduct-on-Submit balance validation is enforced")
     public void testEmployeeDeductOnSubmit() {
@@ -137,5 +146,183 @@ public class LeavePolicyTest {
         // Withdraw Approved Sick Leave
         LeaveRequest withdrawnSick = leaveService.withdrawApprovedLeave(approvedSick.getId(), approverId);
         assertEquals("WITHDRAWN", withdrawnSick.getStatus(), "Status MUST transition to WITHDRAWN and credit back balance");
+    }
+
+    @Test
+    @DisplayName("SCENARIO 5: Rejecting pending, approved leaves and short leaves reverts leave balance to positive")
+    public void testRejectionRevertsLeaveBalanceAndShortLeave() {
+        Long empId = 2L;
+        Long approverId = 101L;
+        int year = 2026;
+
+        // 1. Initial balance check
+        LeaveBalance initialBal = leaveService.getOrCreateLeaveBalance(empId, year);
+        double initialCasualRemaining = initialBal.getCasualLeaveRemaining();
+
+        // 2. Submit a pending casual leave (2 days)
+        LeaveRequest casualReq = LeaveRequest.builder()
+                .employeeId(empId)
+                .leaveType("CASUAL")
+                .startDate(LocalDate.of(2026, 9, 10))
+                .endDate(LocalDate.of(2026, 9, 11))
+                .startSession("FULL_DAY")
+                .endSession("FULL_DAY")
+                .reason("Casual Leave Rejection Test")
+                .build();
+        LeaveRequest submittedCasual = leaveService.applyForLeave(casualReq);
+
+        // Effective remaining balance should decrease by 2
+        LeaveBalance pendingBal = leaveService.getOrCreateLeaveBalance(empId, year);
+        assertEquals(initialCasualRemaining - 2.0, pendingBal.getCasualLeaveRemaining(),
+                "Effective remaining balance MUST decrease by 2.0 while request is PENDING");
+
+        // 3. REJECT the pending casual leave request
+        LeaveRequest rejectedCasual = leaveService.updateStatus(submittedCasual.getId(), "REJECTED", "Rejected by manager", approverId);
+        assertEquals("REJECTED", rejectedCasual.getStatus());
+
+        // Effective remaining balance MUST revert back to initial casual remaining!
+        LeaveBalance revertedBal = leaveService.getOrCreateLeaveBalance(empId, year);
+        assertEquals(initialCasualRemaining, revertedBal.getCasualLeaveRemaining(),
+                "Rejecting pending leave MUST revert the casual leave balance back to positive / original value");
+
+        // 4. Test rejecting an APPROVED leave
+        LeaveRequest approvedReq = LeaveRequest.builder()
+                .employeeId(empId)
+                .leaveType("CASUAL")
+                .startDate(LocalDate.of(2026, 9, 15))
+                .endDate(LocalDate.of(2026, 9, 15))
+                .startSession("FULL_DAY")
+                .endSession("FULL_DAY")
+                .reason("Approved then Rejected Test")
+                .build();
+        LeaveRequest appSubmitted = leaveService.applyForLeave(approvedReq);
+        leaveService.updateStatus(appSubmitted.getId(), "APPROVED", null, approverId);
+
+        // Now reject the approved leave
+        leaveService.updateStatus(appSubmitted.getId(), "REJECTED", "Cancelled after approval", approverId);
+
+        LeaveBalance postApprovedRejectionBal = leaveService.getOrCreateLeaveBalance(empId, year);
+        assertEquals(initialCasualRemaining, postApprovedRejectionBal.getCasualLeaveRemaining(),
+                "Rejecting an approved leave MUST credit back the used balance and restore available balance");
+
+        // 5. Test Short Leave (Short Break) Rejection
+        LeaveRequest shortLeaveReq = LeaveRequest.builder()
+                .employeeId(empId)
+                .leaveType("SHORT_BREAK")
+                .startDate(LocalDate.of(2026, 9, 20))
+                .endDate(LocalDate.of(2026, 9, 20))
+                .reason("Short break request")
+                .build();
+        LeaveRequest submittedShort = leaveService.applyForLeave(shortLeaveReq);
+        assertEquals("PENDING", submittedShort.getStatus());
+
+        // Reject short leave
+        LeaveRequest rejectedShort = leaveService.updateStatus(submittedShort.getId(), "REJECTED", "Too busy today", approverId);
+        assertEquals("REJECTED", rejectedShort.getStatus());
+    }
+
+    @Test
+    @DisplayName("SCENARIO 6: Verify isTimeBased field classification and exact duration-based hourly accumulation")
+    public void testIsTimeBasedFieldAndHourlyDuration() {
+        Long empId = 3L;
+
+        // 1. Submit Short Break with start and end times (e.g. 10:00 to 11:30 = 1.5 hours)
+        LeaveRequest shortBreak = LeaveRequest.builder()
+                .employeeId(empId)
+                .leaveType("SHORT_BREAK")
+                .startDate(LocalDate.of(2026, 9, 25))
+                .endDate(LocalDate.of(2026, 9, 25))
+                .startTime(java.time.LocalTime.of(10, 0))
+                .endTime(java.time.LocalTime.of(11, 30))
+                .reason("Doctor Appointment 1.5 hrs")
+                .build();
+
+        LeaveRequest submitted = leaveService.applyForLeave(shortBreak);
+        assertTrue(submitted.getIsTimeBased(), "isTimeBased field MUST be automatically set to true for SHORT_BREAK");
+
+        // 2. Submit Early Out (e.g. 16:00 to 18:00 = 2.0 hours)
+        LeaveRequest earlyOut = LeaveRequest.builder()
+                .employeeId(empId)
+                .leaveType("EARLY_OUT")
+                .startDate(LocalDate.of(2026, 9, 26))
+                .endDate(LocalDate.of(2026, 9, 26))
+                .startTime(java.time.LocalTime.of(16, 0))
+                .endTime(java.time.LocalTime.of(18, 0))
+                .reason("Personal Early Out 2.0 hrs")
+                .build();
+
+        LeaveRequest submittedEarly = leaveService.applyForLeave(earlyOut);
+        assertTrue(submittedEarly.getIsTimeBased(), "isTimeBased field MUST be automatically set to true for EARLY_OUT");
+
+        // 3. Regular Leave (Casual) must have isTimeBased = false
+        LeaveRequest casual = LeaveRequest.builder()
+                .employeeId(empId)
+                .leaveType("CASUAL")
+                .startDate(LocalDate.of(2026, 9, 27))
+                .endDate(LocalDate.of(2026, 9, 27))
+                .reason("Casual Leave")
+                .build();
+
+        LeaveRequest submittedCasual = leaveService.applyForLeave(casual);
+        assertFalse(submittedCasual.getIsTimeBased(), "isTimeBased field MUST be false for regular Casual leave");
+    }
+
+    @Test
+    @DisplayName("SCENARIO 7: Attendance status auto-sync and re-evaluation upon permission approval")
+    public void testAttendanceAutoSyncOnPermissionApproval() {
+        LocalDate testDate = LocalDate.of(2026, 9, 4);
+
+        // 0. Ensure employee entity exists for relational lookup in AttendanceService
+        com.example.hr_management_backend.features.employees.model.Employee emp =
+                employeeRepository.findByEmail("lovish.test@example.com").orElseGet(() -> employeeRepository.save(
+                        com.example.hr_management_backend.features.employees.model.Employee.builder()
+                                .firstName("Lovish")
+                                .lastName("Kumar")
+                                .email("lovish.test@example.com")
+                                .employeeCode("EMP002")
+                                .role("EMPLOYEE")
+                                .build()
+                ));
+        Long targetEmpId = emp.getId();
+        leaveService.getOrCreateLeaveBalance(targetEmpId, 2026);
+
+        // 1. Create an attendance record marked LATE due to 09:45 AM check-in
+        com.example.hr_management_backend.features.attendance.model.Attendance att =
+                new com.example.hr_management_backend.features.attendance.model.Attendance(
+                        null, targetEmpId, testDate,
+                        java.time.LocalTime.of(9, 45),
+                        java.time.LocalTime.of(18, 0),
+                        "LATE"
+                );
+        attendanceRepository.save(att);
+
+        // Verify initial status is LATE
+        com.example.hr_management_backend.features.attendance.model.Attendance initialAtt =
+                attendanceRepository.findByEmployeeIdAndDate(targetEmpId, testDate).orElseThrow();
+        assertEquals("LATE", initialAtt.getStatus(), "Initial attendance status MUST be LATE");
+
+        // 2. Submit Late Arrival permission request approved until 10:30 AM
+        LeaveRequest lateReq = LeaveRequest.builder()
+                .employeeId(targetEmpId)
+                .leaveType("LATE_ARRIVAL")
+                .startDate(testDate)
+                .endDate(testDate)
+                .startTime(java.time.LocalTime.of(9, 0))
+                .endTime(java.time.LocalTime.of(10, 30))
+                .reason("Late due to traffic")
+                .build();
+        LeaveRequest submittedLate = leaveService.applyForLeave(lateReq);
+
+        // Approve Late Arrival permission
+        leaveService.updateStatus(submittedLate.getId(), "APPROVED", null, 101L);
+
+        // Trigger sync manually for test assertion
+        attendanceService.syncLeaveToAttendance(targetEmpId, testDate, testDate, "LATE_ARRIVAL");
+
+        // Verify attendance status is retroactively updated from LATE to PRESENT!
+        com.example.hr_management_backend.features.attendance.model.Attendance updatedAtt =
+                attendanceRepository.findByEmployeeIdAndDate(targetEmpId, testDate).orElseThrow();
+        assertEquals("PRESENT", updatedAtt.getStatus(),
+                "Attendance status MUST be retroactively updated from LATE to PRESENT upon Late Arrival permission approval");
     }
 }

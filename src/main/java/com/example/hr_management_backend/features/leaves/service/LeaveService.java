@@ -45,6 +45,7 @@ public class LeaveService {
             String cycle = settingsService.getSetting("time_off_cycle");
             String sbUnit = settingsService.getSetting("time_off_short_break_unit_limit");
             String eoUnit = settingsService.getSetting("time_off_early_out_unit_limit");
+            String laUnit = settingsService.getSetting("time_off_late_arrival_unit_limit");
             String hourly = settingsService.getSetting("time_off_hourly_limit");
             
             return "{"
@@ -52,6 +53,7 @@ public class LeaveService {
                     + "\"time_off_cycle\":\"" + (cycle != null ? cycle : "") + "\","
                     + "\"time_off_short_break_unit_limit\":\"" + (sbUnit != null ? sbUnit : "") + "\","
                     + "\"time_off_early_out_unit_limit\":\"" + (eoUnit != null ? eoUnit : "") + "\","
+                    + "\"time_off_late_arrival_unit_limit\":\"" + (laUnit != null ? laUnit : "") + "\","
                     + "\"time_off_hourly_limit\":\"" + (hourly != null ? hourly : "") + "\""
                     + "}";
         } catch (Exception e) {
@@ -111,6 +113,7 @@ public class LeaveService {
         String type = request.getLeaveType() != null ? request.getLeaveType().toUpperCase().replaceAll("[ -]", "_") : "";
         boolean isTimeBased = type.contains("SHORT_BREAK") || type.contains("SHORT_LEAVE")
                 || type.contains("EARLY_OUT") || type.contains("EARLY_LEAVE") || type.contains("LATE_ARRIVAL");
+        request.setIsTimeBased(isTimeBased);
 
         // Validate session overlaps
         validateSessionOverlap(request, isTimeBased);
@@ -171,7 +174,11 @@ public class LeaveService {
                 throw new IllegalStateException("Insufficient leave balance (including pending requests). Effective Available: " + Math.max(0.0, remaining) + " days.");
             }
         } else {
-            // Enforce admin-configured time-off policies for short breaks and early outs
+            // PESSIMISTIC LOCK: Lock employee row to serialize permission quota evaluation and prevent concurrent submission race conditions
+            if (request.getEmployeeId() != null) {
+                employeeRepository.findByIdForUpdate(request.getEmployeeId());
+            }
+            // Enforce admin-configured time-off policies for short breaks, early outs, and late arrivals
             validateTimeBasedPolicy(request, type);
         }
 
@@ -189,19 +196,23 @@ public class LeaveService {
         LeaveRequest request = leaveRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Leave request not found with id: " + requestId));
 
-        if (!"PENDING".equalsIgnoreCase(request.getStatus())) {
-            throw new IllegalStateException("Leave request has already been " + request.getStatus());
+        String previousStatus = request.getStatus() != null ? request.getStatus().toUpperCase() : "PENDING";
+        String newStatus = status.toUpperCase();
+
+        if (previousStatus.equals(newStatus)) {
+            return request;
         }
 
-        request.setStatus(status.toUpperCase());
+        request.setStatus(newStatus);
         request.setRejectionReason(rejectionReason);
         request.setApprovedBy(approverId);
 
-        if ("APPROVED".equalsIgnoreCase(status)) {
-            int year = request.getStartDate().getYear();
-            double requestedDays = request.getTotalDays();
-            String reqType = request.getLeaveType().toUpperCase();
+        int year = request.getStartDate().getYear();
+        double requestedDays = request.getTotalDays() != null ? request.getTotalDays() : 0.0;
+        String reqType = request.getLeaveType() != null ? request.getLeaveType().toUpperCase() : "CASUAL";
+        boolean isTimeBased = reqType.contains("SHORT") || reqType.contains("EARLY") || reqType.contains("LATE");
 
+        if ("APPROVED".equalsIgnoreCase(newStatus)) {
             var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveType(request.getEmployeeId(), year, reqType);
 
             if (specialQuotaOpt.isPresent()) {
@@ -242,6 +253,30 @@ public class LeaveService {
                     }
                 }
                 leaveBalanceRepository.save(balance);
+            }
+        } else if ("REJECTED".equalsIgnoreCase(newStatus) && "APPROVED".equalsIgnoreCase(previousStatus)) {
+            // Revert/refund used balance because a previously approved leave is now rejected
+            if (!isTimeBased) {
+                var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveType(request.getEmployeeId(), year, reqType);
+                if (specialQuotaOpt.isPresent()) {
+                    EmployeeLeaveQuota quota = specialQuotaOpt.get();
+                    quota.setUsed(Math.max(0.0, quota.getUsed() - requestedDays));
+                    employeeLeaveQuotaRepository.save(quota);
+                } else {
+                    LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYearForUpdate(request.getEmployeeId(), year)
+                            .orElseGet(() -> getOrCreateLeaveBalance(request.getEmployeeId(), year));
+
+                    String normType = reqType.replaceAll("_LEAVE$", "");
+                    switch (normType) {
+                        case "SICK" -> balance.setSickLeaveUsed(Math.max(0.0, balance.getSickLeaveUsed() - requestedDays));
+                        case "EARNED" -> balance.setEarnedLeaveUsed(Math.max(0.0, balance.getEarnedLeaveUsed() - requestedDays));
+                        case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0.0, balance.getWorkFromHomeUsed() - requestedDays));
+                        case "UNPAID" -> log.info("Unpaid leave rejected — no balance change for employeeId={}", request.getEmployeeId());
+                        default -> balance.setCasualLeaveUsed(Math.max(0.0, balance.getCasualLeaveUsed() - requestedDays));
+                    }
+                    leaveBalanceRepository.save(balance);
+                }
+                log.info("Refunded {} days of {} leave to employeeId={} due to rejection of approved leave.", requestedDays, reqType, request.getEmployeeId());
             }
         }
 
@@ -321,6 +356,7 @@ public class LeaveService {
         String onBehalfType = request.getLeaveType() != null ? request.getLeaveType().toUpperCase().replaceAll("[ -]", "_") : "";
         boolean isTimeBased = onBehalfType.contains("SHORT_BREAK") || onBehalfType.contains("SHORT_LEAVE")
                 || onBehalfType.contains("EARLY_OUT") || onBehalfType.contains("EARLY_LEAVE") || onBehalfType.contains("LATE_ARRIVAL");
+        request.setIsTimeBased(isTimeBased);
 
         // Validate session overlaps
         validateSessionOverlap(request, isTimeBased);
@@ -508,42 +544,45 @@ public class LeaveService {
                 }
             }
         } else if ("HOURLY_SEPARATE".equalsIgnoreCase(policyMode) || "HOURLY_COMBINED".equalsIgnoreCase(policyMode)) {
-            // Hour-based: for now count requests as a proxy (each short break ~ 1 unit of quota).
-            // When hour tracking is added, this can sum actual durations.
+            // Hour-based: aggregate actual duration in hours using startTime and endTime
             int hourlyLimit = parseIntSetting("time_off_hourly_limit", 4);
 
+            double incomingHours = 1.0;
+            if (request.getStartTime() != null && request.getEndTime() != null) {
+                long mins = ChronoUnit.MINUTES.between(request.getStartTime(), request.getEndTime());
+                if (mins > 0) incomingHours = mins / 60.0;
+            }
+
             if ("HOURLY_COMBINED".equalsIgnoreCase(policyMode)) {
-                // Combined: total of short breaks + early outs + late arrivals must not exceed the limit
-                long shortCount = leaveRequestRepository.countTimeBasedRequestsInCycle(
-                        request.getEmployeeId(), cycleStart, cycleEnd, "%SHORT%");
-                long earlyCount = leaveRequestRepository.countTimeBasedRequestsInCycle(
-                        request.getEmployeeId(), cycleStart, cycleEnd, "%EARLY%");
-                long lateCount = leaveRequestRepository.countTimeBasedRequestsInCycle(
-                        request.getEmployeeId(), cycleStart, cycleEnd, "%LATE%");
-                long totalCount = shortCount + earlyCount + lateCount;
-                if (totalCount >= hourlyLimit) {
-                    throw new IllegalStateException("Combined time-off limit reached (" + hourlyLimit + " per " + cycle.toLowerCase() + "). Used: " + totalCount);
+                double usedHours = computeTotalTimeBasedHours(request.getEmployeeId(), cycleStart, cycleEnd, null);
+                if ((usedHours + incomingHours) > hourlyLimit) {
+                    throw new IllegalStateException("Combined time-off hourly limit exceeded (" + hourlyLimit + " hrs per " + cycle.toLowerCase() + "). Current used: " + String.format("%.1f", usedHours) + " hrs, requested: " + String.format("%.1f", incomingHours) + " hrs.");
                 }
             } else {
-                // Separate: each type has its own hourly limit
-                if (isShortBreak) {
-                    long currentCount = leaveRequestRepository.countTimeBasedRequestsInCycle(
-                            request.getEmployeeId(), cycleStart, cycleEnd, "%SHORT%");
-                    if (currentCount >= hourlyLimit) {
-                        throw new IllegalStateException("Short break hourly limit reached (" + hourlyLimit + " per " + cycle.toLowerCase() + "). Used: " + currentCount);
-                    }
-                } else if (isEarlyOut) {
-                    long currentCount = leaveRequestRepository.countTimeBasedRequestsInCycle(
-                            request.getEmployeeId(), cycleStart, cycleEnd, "%EARLY%");
-                    if (currentCount >= hourlyLimit) {
-                        throw new IllegalStateException("Early out hourly limit reached (" + hourlyLimit + " per " + cycle.toLowerCase() + "). Used: " + currentCount);
-                    }
+                String typePattern = isShortBreak ? "%SHORT%" : (isEarlyOut ? "%EARLY%" : "%LATE%");
+                double usedHours = computeTotalTimeBasedHours(request.getEmployeeId(), cycleStart, cycleEnd, typePattern);
+                if ((usedHours + incomingHours) > hourlyLimit) {
+                    throw new IllegalStateException(normalizedType + " hourly limit exceeded (" + hourlyLimit + " hrs per " + cycle.toLowerCase() + "). Current used: " + String.format("%.1f", usedHours) + " hrs, requested: " + String.format("%.1f", incomingHours) + " hrs.");
                 }
             }
         }
 
         log.info("Time-off policy validated: mode={}, cycle={}, type={}, employeeId={}",
                 policyMode, cycle, normalizedType, request.getEmployeeId());
+    }
+
+    private double computeTotalTimeBasedHours(Long employeeId, LocalDate cycleStart, LocalDate cycleEnd, String typePattern) {
+        List<LeaveRequest> requests = leaveRequestRepository.findTimeBasedRequestsInCycle(employeeId, cycleStart, cycleEnd, typePattern);
+        double totalHours = 0.0;
+        for (LeaveRequest req : requests) {
+            if (req.getStartTime() != null && req.getEndTime() != null) {
+                long mins = ChronoUnit.MINUTES.between(req.getStartTime(), req.getEndTime());
+                totalHours += (mins > 0 ? mins / 60.0 : 1.0);
+            } else {
+                totalHours += 1.0;
+            }
+        }
+        return totalHours;
     }
 
     // ── Session normalization helpers ──────────────────────────────────────────

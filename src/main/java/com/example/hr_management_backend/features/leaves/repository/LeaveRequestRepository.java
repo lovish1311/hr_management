@@ -22,19 +22,19 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
 
     @Query("SELECT COUNT(lr) > 0 FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
            "AND lr.status = 'APPROVED' AND :targetDate BETWEEN lr.startDate AND lr.endDate " +
-           "AND UPPER(lr.leaveType) NOT LIKE '%SHORT%' AND UPPER(lr.leaveType) NOT LIKE '%EARLY%' AND UPPER(lr.leaveType) NOT LIKE '%LATE%'")
+           "AND (lr.isTimeBased IS NULL OR lr.isTimeBased = false)")
     boolean isEmployeeOnApprovedLeave(@Param("employeeId") Long employeeId, @Param("targetDate") LocalDate targetDate);
 
     @Query("SELECT COUNT(lr) FROM LeaveRequest lr WHERE lr.status = 'APPROVED' AND :targetDate BETWEEN lr.startDate AND lr.endDate")
     int countActiveLeavesOnDate(@Param("targetDate") LocalDate targetDate);
 
     /**
-     * Overlap check that excludes time-based leave types (SHORT_BREAK, SHORT_LEAVE, EARLY_OUT, EARLY_LEAVE).
-     * This allows short breaks and early outs to coexist with regular leaves on the same date.
+     * Overlap check that excludes time-based leave types (SHORT_BREAK, SHORT_LEAVE, EARLY_OUT, EARLY_LEAVE, LATE_ARRIVAL).
+     * Uses indexed is_time_based column to prevent unindexed string wildcard scanning.
      */
     @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
            "AND lr.status != 'REJECTED' AND lr.status != 'WITHDRAWN' " +
-           "AND UPPER(lr.leaveType) NOT LIKE '%SHORT%' AND UPPER(lr.leaveType) NOT LIKE '%EARLY%' AND UPPER(lr.leaveType) NOT LIKE '%LATE%' " +
+           "AND (lr.isTimeBased IS NULL OR lr.isTimeBased = false) " +
            "AND (:startDate <= lr.endDate AND :endDate >= lr.startDate)")
     List<LeaveRequest> findOverlappingLeaves(@Param("employeeId") Long employeeId,
                                             @Param("startDate") LocalDate startDate,
@@ -46,17 +46,32 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
                                                            @Param("endDate") LocalDate endDate);
 
     /**
-     * Count time-based (short break / early out) requests for an employee within a date range cycle.
-     * Used for policy enforcement (hourly/unit limits).
+     * Count time-based (short break / early out / late arrival) requests for an employee within a date range cycle.
+     * Uses indexed is_time_based column.
      */
     @Query("SELECT COUNT(lr) FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
            "AND (lr.status = 'APPROVED' OR lr.status = 'PENDING') " +
            "AND lr.startDate >= :cycleStart AND lr.startDate <= :cycleEnd " +
+           "AND (lr.isTimeBased = true OR UPPER(lr.leaveType) LIKE :typePattern) " +
            "AND (UPPER(lr.leaveType) LIKE :typePattern)")
     long countTimeBasedRequestsInCycle(@Param("employeeId") Long employeeId,
                                        @Param("cycleStart") LocalDate cycleStart,
                                        @Param("cycleEnd") LocalDate cycleEnd,
                                        @Param("typePattern") String typePattern);
+
+    /**
+     * Fetch time-based requests for an employee within a cycle to accurately aggregate actual time durations (in hours/minutes).
+     * Used for HOURLY_SEPARATE and HOURLY_COMBINED policy modes.
+     */
+    @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
+           "AND (lr.status = 'APPROVED' OR lr.status = 'PENDING') " +
+           "AND lr.startDate >= :cycleStart AND lr.startDate <= :cycleEnd " +
+           "AND (lr.isTimeBased = true OR UPPER(lr.leaveType) LIKE '%SHORT%' OR UPPER(lr.leaveType) LIKE '%EARLY%' OR UPPER(lr.leaveType) LIKE '%LATE%') " +
+           "AND (:typePattern IS NULL OR UPPER(lr.leaveType) LIKE :typePattern)")
+    List<LeaveRequest> findTimeBasedRequestsInCycle(@Param("employeeId") Long employeeId,
+                                                    @Param("cycleStart") LocalDate cycleStart,
+                                                    @Param("cycleEnd") LocalDate cycleEnd,
+                                                    @Param("typePattern") String typePattern);
 
     /**
      * Fetch leaves (approved + pending) scoped to a specific month range for calendar summary.

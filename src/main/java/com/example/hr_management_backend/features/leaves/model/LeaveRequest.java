@@ -10,7 +10,8 @@ import java.time.LocalTime;
 @Entity
 @Table(name = "leave_requests", indexes = {
     @Index(name = "idx_leave_emp", columnList = "employeeId"),
-    @Index(name = "idx_leave_status", columnList = "status")
+    @Index(name = "idx_leave_status", columnList = "status"),
+    @Index(name = "idx_leave_emp_timebased", columnList = "employeeId, is_time_based, status, startDate")
 })
 @Data
 @NoArgsConstructor
@@ -36,6 +37,10 @@ public class LeaveRequest {
 
     @Builder.Default
     private Double totalDays = 1.0;
+
+    @Builder.Default
+    @Column(name = "is_time_based")
+    private Boolean isTimeBased = false;
 
     @com.fasterxml.jackson.annotation.JsonProperty("fromSession")
     @Column(name = "start_session")
@@ -76,6 +81,14 @@ public class LeaveRequest {
     protected void onCreate() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (isTimeBased == null) {
+            if (leaveType != null) {
+                String type = leaveType.toUpperCase();
+                isTimeBased = type.contains("SHORT") || type.contains("EARLY") || type.contains("LATE");
+            } else {
+                isTimeBased = false;
+            }
         }
     }
 }

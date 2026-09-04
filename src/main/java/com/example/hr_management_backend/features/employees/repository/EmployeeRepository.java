@@ -35,5 +35,9 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     
     @EntityGraph(attributePaths = {"manager"})
     Page<Employee> findByRoleNotIgnoreCase(String role, Pageable pageable);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT e FROM Employee e WHERE e.id = :id")
+    Optional<Employee> findByIdForUpdate(@Param("id") Long id);
 }
 
