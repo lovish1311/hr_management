@@ -68,7 +68,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth ->
                         auth.requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/ws/**", "/ws/tambola/**").permitAll()
-                                .anyRequest().authenticated()
+                                .requestMatchers("/", "/index.html", "/*.js", "/*.json", "/*.wasm", "/*.png", "/assets/**", "/icons/**", "/canvaskit/**", "/flutter.js", "/flutter_bootstrap.js", "/flutter_service_worker.js").permitAll()
+                                .requestMatchers("/api/**").authenticated()
+                                .anyRequest().permitAll()
                 );
 
         http.authenticationProvider(authenticationProvider());
