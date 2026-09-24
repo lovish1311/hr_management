@@ -79,7 +79,8 @@ public class EmployeeController {
                 id,
                 dto.getIsAttendanceTracked(),
                 dto.getLateArrivalAllowedUntil(),
-                dto.getEarlyOutAllowedAfter()
+                dto.getEarlyOutAllowedAfter(),
+                dto.getHasTambolaAccess()
         ));
     }
 

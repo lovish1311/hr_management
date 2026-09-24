@@ -13,4 +13,5 @@ public class UpdatePermissionsDto {
     private Boolean isAttendanceTracked;
     private String lateArrivalAllowedUntil; // e.g. "12:00" or "12:00:00" or null
     private String earlyOutAllowedAfter;    // e.g. "17:00" or "17:00:00" or null
+    private Boolean hasTambolaAccess;
 }

@@ -56,6 +56,20 @@ public class LeaveController {
         return ResponseEntity.ok(updated);
     }
 
+    @PutMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
+    public ResponseEntity<LeaveRequest> cancelLeaveRequest(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body) {
+        Long actorId = null;
+        if (body != null && body.containsKey("actorId")) {
+            try {
+                actorId = Long.parseLong(body.get("actorId"));
+            } catch (Exception ignored) {}
+        }
+        return ResponseEntity.ok(leaveService.cancelLeaveRequest(id, actorId));
+    }
+
     @GetMapping("/employee/{employeeId}")
     public ResponseEntity<List<LeaveRequest>> getLeavesByEmployee(@PathVariable Long employeeId) {
         return ResponseEntity.ok(leaveService.getLeavesByEmployee(employeeId));

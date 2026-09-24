@@ -27,6 +27,7 @@ public class DataInitializer implements CommandLineRunner {
     private final LeaveBalanceRepository leaveBalanceRepository;
     private final LeaveRequestRepository leaveRequestRepository;
     private final PasswordEncoder passwordEncoder;
+    private final com.example.hr_management_backend.features.payroll.service.PayrollService payrollService;
 
     @Override
     public void run(String... args) throws Exception {
@@ -49,23 +50,22 @@ public class DataInitializer implements CommandLineRunner {
             Employee ankeshManager = createEmployee("Ankesh", "Verma", "ankesh.verma@company.com", "Sales & Marketing", "Sales Director", "MANAGER", "EMP-103", "Ankesh Verma", null, false, "+91 98123 00103", "1990-07-08", "Male", "Civil Lines, Jaipur");
             createUser("ankesh.verma@company.com", "manager123", "ROLE_MANAGER", ankeshManager.getId());
 
-            // 4. Employees (All 28 Real Excel Employees - isAttendanceTracked = true)
+            // 4. Employees (All 29 Real Excel Employees - isAttendanceTracked = true)
             // Engineering Team (Harsh Kaushal)
             Employee ishu = createEmployee("Ishu", "Saini", "ishu.saini@company.com", "Engineering", "Senior Software Developer", "EMPLOYEE", "EMP-201", "ishu Saini", harshManager, true, "+91 98123 45201", "1997-04-12", "Male", "Sector 34, Chandigarh");
             Employee lovish = createEmployee("Lovish", "Kumar", "lovish@company.com", "Engineering", "Senior Software Developer", "EMPLOYEE", "EMP-202", "Lovish", harshManager, true, "+91 98123 45202", "1996-08-19", "Male", "Phase 7, Mohali");
             Employee abhishekG = createEmployee("Abhishek", "Gaur", "abhishek.g@company.com", "Engineering", "Frontend Developer", "EMPLOYEE", "EMP-203", "AbhishekG", harshManager, true, "+91 98123 45203", "1998-02-14", "Male", "Sector 22, Chandigarh");
             Employee abhinav = createEmployee("Abhinav", "Singh", "abhinav@company.com", "Engineering", "Backend Developer", "EMPLOYEE", "EMP-204", "Abhinav", harshManager, true, "+91 98123 45204", "1997-11-05", "Male", "Zirakpur, Punjab");
             Employee gurkirat = createEmployee("Gurkirat", "Singh", "gurkirat@company.com", "Engineering", "Tech Lead", "EMPLOYEE", "EMP-205", "Gurkirat", harshManager, true, "+91 98123 45205", "1995-09-30", "Male", "Phase 3B2, Mohali");
-            Employee ashish = createEmployee("Ashish", "Chaudhari", "ashish@company.com", "Engineering", "QA Engineer", "EMPLOYEE", "EMP-206", "Ashish Chaudhari", harshManager, true, "+91 98123 45206", "1999-01-22", "Male", "Sector 70, Mohali");
-            Employee aman = createEmployee("Aman", "Dhiman", "aman@company.com", "Engineering", "Junior Software Developer", "EMPLOYEE", "EMP-207", "Aman Dhiman", harshManager, true, "+91 98123 45207", "2000-06-15", "Male", "Sector 15, Panchkula");
+            Employee ashish = createEmployee("Ashish", "Chauhan", "ashish@company.com", "Engineering", "QA Engineer", "EMPLOYEE", "EMP-206", "Ashish Chauhan", harshManager, true, "+91 98123 45206", "1999-01-22", "Male", "Sector 70, Mohali");
             Employee aniket = createEmployee("Aniket", "Sharma", "aniket@company.com", "Engineering", "Software Engineer", "EMPLOYEE", "EMP-208", "Aniket Sharma", harshManager, true, "+91 98123 45208", "1998-10-18", "Male", "Sector 11, Panchkula");
+            Employee himanshu = createEmployee("Himanshu", "Rana", "himanshu.rana@company.com", "Engineering", "DevOps Engineer", "EMPLOYEE", "EMP-229", "Himanshu Rana", harshManager, true, "+91 98123 45229", "1996-05-14", "Male", "Phase 7, Mohali");
 
-            // Product Team (Naveen Chandra Tiwari)
-            Employee abhishekY = createEmployee("Abhishek", "Yadav", "abhishek.yadav@company.com", "Product", "Product Analyst", "EMPLOYEE", "EMP-209", "Abhishek Yadav", naveenManager, true, "+91 98123 45209", "1996-03-29", "Male", "Phase 11, Mohali");
-            Employee nikhilesh = createEmployee("Nikhilesh", "Thakur", "nikhilesh@company.com", "Product", "Senior Product Analyst", "EMPLOYEE", "EMP-210", "Nikhilesh Thakur", naveenManager, true, "+91 98123 45210", "1995-12-04", "Male", "Sector 44, Chandigarh");
+            // Product & Operations Team (Naveen Chandra Tiwari)
             Employee kuldeep = createEmployee("Kuldeep", "Singh", "kuldeep@company.com", "Product", "Technical Writer", "EMPLOYEE", "EMP-211", "Kuldeep", naveenManager, true, "+91 98123 45211", "1994-07-21", "Male", "Kharar, Punjab");
             Employee abhishekT = createEmployee("Abhishek", "Thakur", "abhishek.thakur@company.com", "Product", "Business Analyst", "EMPLOYEE", "EMP-212", "Abhishek Thakur", naveenManager, true, "+91 98123 45212", "1997-05-09", "Male", "Sector 35, Chandigarh");
             Employee parav = createEmployee("Parav", "Taneja", "parav@company.com", "Product", "QA Engineer", "EMPLOYEE", "EMP-213", "Parav Taneja", naveenManager, true, "+91 98123 45213", "1999-09-17", "Male", "Phase 5, Mohali");
+            Employee sandeep = createEmployee("Sandeep", "Gill", "sandeep.gill@company.com", "Operations", "Operations Analyst", "EMPLOYEE", "EMP-230", "Sandeep Gill", naveenManager, true, "+91 98123 45230", "1995-08-21", "Male", "IT Park, Chandigarh");
 
             // Sales, Design & Marketing Team (Ankesh Verma)
             Employee anshu = createEmployee("Anshu", "Sharma", "anshu@company.com", "Marketing", "Content Writer", "EMPLOYEE", "EMP-214", "Anshu", ankeshManager, true, "+91 98123 45214", "1998-08-25", "Female", "Sector 46, Chandigarh");
@@ -79,13 +79,15 @@ public class DataInitializer implements CommandLineRunner {
             Employee chanda = createEmployee("Chanda", "Rani", "chanda@company.com", "Design", "UI/UX Designer", "EMPLOYEE", "EMP-222", "Chanda", ankeshManager, true, "+91 98123 45222", "1997-03-03", "Female", "Sector 19, Chandigarh");
             Employee palak = createEmployee("Palak", "Sharma", "palak@company.com", "Marketing", "SEO Analyst", "EMPLOYEE", "EMP-223", "Palak Sharma", ankeshManager, true, "+91 98123 45223", "1999-05-16", "Female", "Sector 12, Panchkula");
             Employee nuri = createEmployee("Nuri", "Naz", "nuri@company.com", "Sales", "BDE", "EMPLOYEE", "EMP-224", "Nuri Naz", ankeshManager, true, "+91 98123 45224", "1998-11-20", "Female", "Sector 32, Chandigarh");
-            Employee mehakD = createEmployee("Mehak", "Dhillon", "mehak.dhillon@company.com", "Design", "Graphic Designer", "EMPLOYEE", "EMP-225", "Mehak Dhillon", ankeshManager, true, "+91 98123 45225", "1997-09-08", "Female", "Phase 6, Mohali");
+            Employee mehakD = createEmployee("Mehak", "Dhingra", "mehak.dhingra@company.com", "Design", "Graphic Designer", "EMPLOYEE", "EMP-225", "Mehak Dhingra", ankeshManager, true, "+91 98123 45225", "1997-09-08", "Female", "Phase 6, Mohali");
             Employee pradeep = createEmployee("Pradeep", "Negi", "pradeep@company.com", "Sales", "Sales Executive", "EMPLOYEE", "EMP-226", "Pradeep Negi", ankeshManager, true, "+91 98123 45226", "1996-02-24", "Male", "Zirakpur, Punjab");
             Employee sakshi = createEmployee("Sakshi", "Sharma", "sakshi@company.com", "Marketing", "Content Writer", "EMPLOYEE", "EMP-227", "Sakshi Sharma", ankeshManager, true, "+91 98123 45227", "1998-10-02", "Female", "Sector 8, Panchkula");
             Employee sahil = createEmployee("Sahil", "Billowria", "sahil@company.com", "Sales", "BDE", "EMPLOYEE", "EMP-228", "Sahil Billowria", ankeshManager, true, "+91 98123 45228", "1997-07-13", "Male", "Sector 40, Chandigarh");
+            Employee tanzeel = createEmployee("Tanzeel", "Khan", "tanzeel@company.com", "Sales", "BDE", "EMPLOYEE", "EMP-231", "Tanzeel", ankeshManager, true, "+91 98123 45231", "1998-12-10", "Female", "Sector 22, Chandigarh");
+            Employee tammana = createEmployee("Tammana", "Sharma", "tammana@company.com", "Design", "UI Designer", "EMPLOYEE", "EMP-232", "Tammana", ankeshManager, true, "+91 98123 45232", "1999-04-18", "Female", "Sector 35, Chandigarh");
 
             // Create User Login Credentials for all
-            List<Employee> seededEmployees = List.of(ishu, lovish, abhishekG, abhinav, gurkirat, ashish, aman, aniket, abhishekY, nikhilesh, kuldeep, abhishekT, parav, anshu, nisha, mehak, harleen, jyoti, sadham, vishali, anjali, chanda, palak, nuri, mehakD, pradeep, sakshi, sahil);
+            List<Employee> seededEmployees = List.of(ishu, lovish, abhishekG, abhinav, gurkirat, ashish, aniket, himanshu, kuldeep, abhishekT, parav, sandeep, anshu, nisha, mehak, harleen, jyoti, sadham, vishali, anjali, chanda, palak, nuri, mehakD, pradeep, sakshi, sahil, tanzeel, tammana);
             for (Employee emp : seededEmployees) {
                 createUser(emp.getEmail(), "user123", "ROLE_EMPLOYEE", emp.getId());
 
@@ -104,7 +106,10 @@ public class DataInitializer implements CommandLineRunner {
                 }
             }
 
-            log.info("Database successfully seeded with Aadisha Dhullar (HR), 3 Managers, and all 28 Excel employees!");
+            // Seed 6-month historical payroll for demo employee (Lovish)
+            payrollService.getPayrollHistory(lovish.getId());
+
+            log.info("Database successfully seeded with Aadisha Dhullar (HR), 3 Managers, all 29 Excel employees, and 6-month Payroll history!");
     }
 
     private Employee createEmployee(String firstName, String lastName, String email, String dept, String designation, String role, String code, String biometricName, Employee manager, boolean isAttendanceTracked, String phone, String dob, String gender, String address) {

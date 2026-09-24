@@ -38,4 +38,5 @@ public class EmployeeDetailDto {
     private String managerName;
     private String todayAttendanceStatus; // e.g. PRESENT, LATE, ABSENT, ON_LEAVE, EXEMPT
     private Integer leaveBalance;
+    private Boolean hasTambolaAccess;
 }

@@ -24,6 +24,52 @@ public class HrManagementApplication {
             PasswordEncoder passwordEncoder
     ) {
         return args -> {
+            // Seed Employee User (Lovish)
+            if (!userRepository.existsByEmail("lovish@company.com")) {
+                Employee lovishEmp = new Employee();
+                lovishEmp.setFirstName("Lovish");
+                lovishEmp.setLastName("Kumar");
+                lovishEmp.setEmail("lovish@company.com");
+                lovishEmp.setDepartment("Engineering");
+                lovishEmp.setRole("EMPLOYEE");
+                Employee savedLovish = employeeRepository.save(lovishEmp);
+
+                User lovishUser = User.builder()
+                        .email("lovish@company.com")
+                        .password(passwordEncoder.encode("user123"))
+                        .role("EMPLOYEE")
+                        .employeeId(savedLovish.getId())
+                        .build();
+                userRepository.save(lovishUser);
+            }
+
+            // Seed HR Lead User (Aadisha / HR)
+            if (!userRepository.existsByEmail("hr@company.com")) {
+                Employee hrEmp = new Employee();
+                hrEmp.setFirstName("Aadisha");
+                hrEmp.setLastName("HR");
+                hrEmp.setEmail("hr@company.com");
+                hrEmp.setDepartment("Human Resources");
+                hrEmp.setRole("HR");
+                Employee savedHr = employeeRepository.save(hrEmp);
+
+                User hrUser = User.builder()
+                        .email("hr@company.com")
+                        .password(passwordEncoder.encode("hr123"))
+                        .role("HR")
+                        .employeeId(savedHr.getId())
+                        .build();
+                userRepository.save(hrUser);
+
+                // Assign HR as Manager for Lovish
+                userRepository.findByEmail("lovish@company.com").ifPresent(u -> {
+                    employeeRepository.findById(u.getEmployeeId()).ifPresent(e -> {
+                        e.setManager(savedHr);
+                        employeeRepository.save(e);
+                    });
+                });
+            }
+
             // Seed Admin User
             if (!userRepository.existsByEmail("admin@company.com")) {
                 Employee adminEmp = new Employee();
@@ -36,49 +82,11 @@ public class HrManagementApplication {
 
                 User adminUser = User.builder()
                         .email("admin@company.com")
-                        .password(passwordEncoder.encode("Password123!"))
+                        .password(passwordEncoder.encode("admin123"))
                         .role("ADMIN")
                         .employeeId(savedEmp.getId())
                         .build();
                 userRepository.save(adminUser);
-            }
-
-            // Seed Employee User
-            if (!userRepository.existsByEmail("john.doe@company.com")) {
-                Employee emp = new Employee();
-                emp.setFirstName("John");
-                emp.setLastName("Doe");
-                emp.setEmail("john.doe@company.com");
-                emp.setDepartment("Engineering");
-                emp.setRole("EMPLOYEE");
-                Employee savedEmp = employeeRepository.save(emp);
-
-                User empUser = User.builder()
-                        .email("john.doe@company.com")
-                        .password(passwordEncoder.encode("Employee123!"))
-                        .role("EMPLOYEE")
-                        .employeeId(savedEmp.getId())
-                        .build();
-                userRepository.save(empUser);
-            }
-
-            // Seed Manager User
-            if (!userRepository.existsByEmail("jane.smith@company.com")) {
-                Employee mgr = new Employee();
-                mgr.setFirstName("Jane");
-                mgr.setLastName("Smith");
-                mgr.setEmail("jane.smith@company.com");
-                mgr.setDepartment("Human Resources");
-                mgr.setRole("MANAGER");
-                Employee savedEmp = employeeRepository.save(mgr);
-
-                User mgrUser = User.builder()
-                        .email("jane.smith@company.com")
-                        .password(passwordEncoder.encode("Manager123!"))
-                        .role("MANAGER")
-                        .employeeId(savedEmp.getId())
-                        .build();
-                userRepository.save(mgrUser);
             }
         };
     }

@@ -9,6 +9,7 @@ import java.util.Optional;
 
 @Repository
 public interface EmployeeLeaveQuotaRepository extends JpaRepository<EmployeeLeaveQuota, Long> {
+    List<EmployeeLeaveQuota> findByEmployeeId(Long employeeId);
     List<EmployeeLeaveQuota> findByEmployeeIdAndYear(Long employeeId, Integer year);
     Optional<EmployeeLeaveQuota> findByEmployeeIdAndYearAndLeaveType(Long employeeId, Integer year, String leaveType);
 }

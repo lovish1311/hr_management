@@ -135,11 +135,22 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Transactional
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public EmployeeDetailDto updatePermissions(Long employeeId, Boolean isAttendanceTracked, String lateArrivalAllowedUntil, String earlyOutAllowedAfter) {
+        return updatePermissions(employeeId, isAttendanceTracked, lateArrivalAllowedUntil, earlyOutAllowedAfter, null);
+    }
+
+    @Override
+    @Transactional
+    @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
+    public EmployeeDetailDto updatePermissions(Long employeeId, Boolean isAttendanceTracked, String lateArrivalAllowedUntil, String earlyOutAllowedAfter, Boolean hasTambolaAccess) {
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
 
         if (isAttendanceTracked != null) {
             employee.setIsAttendanceTracked(isAttendanceTracked);
+        }
+
+        if (hasTambolaAccess != null) {
+            employee.setHasTambolaAccess(hasTambolaAccess);
         }
 
         if (lateArrivalAllowedUntil != null) {
@@ -274,6 +285,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .managerName(managerName)
                 .todayAttendanceStatus(computeTodayStatus(employee))
                 .leaveBalance(computeLeaveBalance(employee.getId()))
+                .hasTambolaAccess(Boolean.TRUE.equals(employee.getHasTambolaAccess()))
                 .build();
     }
 }

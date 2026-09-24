@@ -40,6 +40,7 @@ public class LeaveService {
     private final AttendanceRepository attendanceRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final SettingsService settingsService;
+    private final com.example.hr_management_backend.features.leaves.policy.LeavePolicyEngine leavePolicyEngine;
     private String capturePolicySnapshot() {
         try {
             String mode = settingsService.getSetting("time_off_policy_mode");
@@ -120,14 +121,14 @@ public class LeaveService {
         validateSessionOverlap(request, isTimeBased);
 
         // Dynamically resolve assigned manager for leave routing
+        com.example.hr_management_backend.features.employees.model.Employee empObj = null;
         if (request.getEmployeeId() != null) {
-            employeeRepository.findById(request.getEmployeeId()).ifPresent(emp -> {
-                if (emp.getManager() != null) {
-                    request.setApprovedBy(emp.getManager().getId());
-                    log.info("Leave request routed dynamically to assigned manager: {} (ID: {})",
-                            emp.getManager().getFirstName() + " " + emp.getManager().getLastName(), emp.getManager().getId());
-                }
-            });
+            empObj = employeeRepository.findById(request.getEmployeeId()).orElse(null);
+            if (empObj != null && empObj.getManager() != null) {
+                request.setApprovedBy(empObj.getManager().getId());
+                log.info("Leave request routed dynamically to assigned manager: {} (ID: {})",
+                        empObj.getManager().getFirstName() + " " + empObj.getManager().getLastName(), empObj.getManager().getId());
+            }
         }
 
         // Server-side authoritative calculation of totalDays — never trust client value alone
@@ -139,6 +140,10 @@ public class LeaveService {
         if (request.getLeaveType() == null || request.getLeaveType().isBlank()) {
             request.setLeaveType("CASUAL");
         }
+
+        // Execute pluggable LeavePolicyEngine rules
+        leavePolicyEngine.validateRequest(request, empObj);
+        leavePolicyEngine.computeDeductions(request);
 
         // Capture policy snapshot for ALL leave types (audit trail)
         request.setPolicySnapshot(capturePolicySnapshot());
@@ -739,7 +744,18 @@ public class LeaveService {
                     boolean extS1 = false;
                     boolean extS2 = false;
 
-                    if (date.isAfter(existing.getStartDate()) && date.isBefore(existing.getEndDate())) {
+                    if (Boolean.TRUE.equals(existing.getIsTimeBased())) {
+                        if (existing.getStartTime() != null) {
+                            if (existing.getStartTime().isBefore(LocalTime.of(13, 30))) {
+                                extS1 = true;
+                            } else {
+                                extS2 = true;
+                            }
+                        } else {
+                            extS1 = true;
+                            extS2 = true;
+                        }
+                    } else if (date.isAfter(existing.getStartDate()) && date.isBefore(existing.getEndDate())) {
                         extS1 = true;
                         extS2 = true;
                     } else if (existing.getStartDate().equals(existing.getEndDate())) {
@@ -827,6 +843,58 @@ public class LeaveService {
     }
 
     @Transactional
+    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    public LeaveRequest cancelLeaveRequest(Long requestId, Long actorId) {
+        LeaveRequest request = leaveRequestRepository.findById(requestId)
+                .orElseThrow(() -> new RuntimeException("Leave request not found with id: " + requestId));
+
+        String oldStatus = request.getStatus() != null ? request.getStatus().toUpperCase() : "PENDING";
+        if ("CANCELLED".equals(oldStatus) || "REJECTED".equals(oldStatus)) {
+            throw new IllegalStateException("Leave request is already " + oldStatus);
+        }
+
+        // Refund used balance if the request was previously APPROVED
+        if ("APPROVED".equals(oldStatus)) {
+            int year = request.getStartDate().getYear();
+            double requestedDays = request.getTotalDays() != null ? request.getTotalDays() : 0.0;
+            String reqType = request.getLeaveType() != null ? request.getLeaveType().toUpperCase() : "CASUAL";
+            boolean isTimeBased = Boolean.TRUE.equals(request.getIsTimeBased());
+
+            if (!isTimeBased && requestedDays > 0) {
+                var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveType(request.getEmployeeId(), year, reqType);
+                if (specialQuotaOpt.isPresent()) {
+                    var quota = specialQuotaOpt.get();
+                    quota.setUsed(Math.max(0.0, quota.getUsed() - requestedDays));
+                    employeeLeaveQuotaRepository.save(quota);
+                } else {
+                    LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYearForUpdate(request.getEmployeeId(), year)
+                            .orElseGet(() -> getOrCreateLeaveBalance(request.getEmployeeId(), year));
+                    String normType = reqType.replaceAll("_LEAVE$", "");
+                    switch (normType) {
+                        case "SICK" -> balance.setSickLeaveUsed(Math.max(0.0, balance.getSickLeaveUsed() - requestedDays));
+                        case "EARNED" -> balance.setEarnedLeaveUsed(Math.max(0.0, balance.getEarnedLeaveUsed() - requestedDays));
+                        case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0.0, balance.getWorkFromHomeUsed() - requestedDays));
+                        default -> balance.setCasualLeaveUsed(Math.max(0.0, balance.getCasualLeaveUsed() - requestedDays));
+                    }
+                    leaveBalanceRepository.save(balance);
+                }
+                log.info("Refunded {} days of {} leave to employeeId={} due to cancellation of approved request ID={}",
+                        requestedDays, reqType, request.getEmployeeId(), requestId);
+            }
+        }
+
+        request.setStatus("CANCELLED");
+        LeaveRequest saved = leaveRequestRepository.save(request);
+
+        leavePolicyEngine.handleStatusChange(saved, oldStatus, "CANCELLED");
+        eventPublisher.publishEvent(new com.example.hr_management_backend.features.leaves.event.LeaveWithdrawnEvent(
+                saved.getEmployeeId(), saved.getStartDate(), saved.getEndDate(), saved.getLeaveType()
+        ));
+
+        return saved;
+    }
+
+    @Transactional
     public void clearEmployeeLeaveData(Long employeeId) {
         List<LeaveRequest> empRequests = leaveRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId);
         leaveRequestRepository.deleteAllInBatch(empRequests);
@@ -840,7 +908,7 @@ public class LeaveService {
         }
         leaveBalanceRepository.saveAll(balances);
 
-        List<EmployeeLeaveQuota> quotas = employeeLeaveQuotaRepository.findByEmployeeIdAndYear(employeeId, java.time.Year.now().getValue());
+        List<EmployeeLeaveQuota> quotas = employeeLeaveQuotaRepository.findByEmployeeId(employeeId);
         for (EmployeeLeaveQuota q : quotas) {
             q.setUsed(0.0);
         }

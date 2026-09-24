@@ -68,6 +68,10 @@ public class Employee {
     @Builder.Default
     private Boolean isAttendanceTracked = true; // HR toggle to enable/disable attendance tracking
 
+    @Builder.Default
+    @Column(name = "has_tambola_access")
+    private Boolean hasTambolaAccess = false; // Admin grant for Tambola game management
+
     private String departmentCategory; // Engineering, Sales, Design, Marketing, General
 
     @ManyToOne(fetch = FetchType.LAZY)

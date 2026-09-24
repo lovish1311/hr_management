@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -460,7 +462,7 @@ public class AttendanceService {
         int absentCount = 0;
         int unmatchedCount = 0;
 
-        try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
+        try (Workbook workbook = getBeautifiedWorkbook(file)) {
             Sheet sheet = workbook.getSheetAt(0);
 
             int nameColIndex = 1;
@@ -769,10 +771,51 @@ public class AttendanceService {
         try {
             String graceStr = settingsService.getSetting("earlyOutGraceMinutes");
             long grace = (graceStr != null && !graceStr.isEmpty()) ? Long.parseLong(graceStr) : 0L;
-            return getUniversalShiftEnd().minusMinutes(grace);
+            return LocalTime.of(18, 0);
         } catch (Exception e) {
             return LocalTime.of(18, 0);
         }
+    }
+
+    private Workbook getBeautifiedWorkbook(MultipartFile file) throws IOException {
+        String scriptPath = "C:\\Users\\Lovish\\Projects\\attendance_beautifier.py";
+        java.io.File scriptFile = new java.io.File(scriptPath);
+
+        if (scriptFile.exists()) {
+            java.io.File tempDir = new java.io.File(System.getProperty("java.io.tmpdir"));
+            String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "raw.xlsx";
+            String ext = originalFilename.contains(".") ? originalFilename.substring(originalFilename.lastIndexOf(".")) : ".xlsx";
+            
+            java.io.File rawFile = java.io.File.createTempFile("biometric_raw_", ext, tempDir);
+            java.io.File beautifiedFile = java.io.File.createTempFile("biometric_beautified_", ".xlsx", tempDir);
+            
+            try {
+                file.transferTo(rawFile);
+
+                String pythonExecutable = "C:\\Users\\Lovish\\AppData\\Local\\Programs\\Python\\Python312\\python.exe";
+                if (!new java.io.File(pythonExecutable).exists()) {
+                    pythonExecutable = "python";
+                }
+
+                ProcessBuilder pb = new ProcessBuilder(pythonExecutable, scriptPath, rawFile.getAbsolutePath(), beautifiedFile.getAbsolutePath());
+                pb.redirectErrorStream(true);
+                Process process = pb.start();
+                boolean finished = process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
+
+                if (finished && process.exitValue() == 0 && beautifiedFile.exists() && beautifiedFile.length() > 0) {
+                    log.info("Auto-beautified biometric Excel file successfully via python attendance_beautifier.py!");
+                    return WorkbookFactory.create(beautifiedFile);
+                } else {
+                    log.warn("Python beautifier script did not finish or exited with error. Using original file stream.");
+                }
+            } catch (Exception e) {
+                log.warn("Failed to execute python attendance_beautifier.py: {}. Falling back to original stream.", e.getMessage());
+            } finally {
+                rawFile.deleteOnExit();
+                beautifiedFile.deleteOnExit();
+            }
+        }
+        return WorkbookFactory.create(file.getInputStream());
     }
 }
 

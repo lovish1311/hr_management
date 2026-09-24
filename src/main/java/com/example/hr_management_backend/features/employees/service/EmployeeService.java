@@ -15,6 +15,7 @@ public interface EmployeeService {
     EmployeeDetailDto getEmployeeDetail(Long id);
     EmployeeSummaryDto assignManager(Long employeeId, Long managerId);
     EmployeeDetailDto updatePermissions(Long employeeId, Boolean isAttendanceTracked, String lateArrivalAllowedUntil, String earlyOutAllowedAfter);
+    EmployeeDetailDto updatePermissions(Long employeeId, Boolean isAttendanceTracked, String lateArrivalAllowedUntil, String earlyOutAllowedAfter, Boolean hasTambolaAccess);
     void deleteEmployee(Long id);
 }
 

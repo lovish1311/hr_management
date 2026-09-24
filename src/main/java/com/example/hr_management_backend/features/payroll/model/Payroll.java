@@ -1,89 +1,99 @@
 package com.example.hr_management_backend.features.payroll.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDate;
 
 @Entity
-@Table(name = "payroll")
+@Table(name = "payroll", indexes = {
+    @Index(name = "idx_payroll_emp_period", columnList = "employeeId, payPeriod")
+})
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Payroll {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false)
     private Long employeeId;
-    private double baseSalary;
-    private double bonuses;
-    private double deductions;
-    private double netSalary;
-    private String payPeriod; // e.g. "2026-07"
 
-    public Payroll() {}
+    private String employeeName;
+    private String employeeCode;
+    private String designation;
+    private String department;
 
-    public Payroll(Long id, Long employeeId, double baseSalary, double bonuses, double deductions, double netSalary, String payPeriod) {
-        this.id = id;
-        this.employeeId = employeeId;
-        this.baseSalary = baseSalary;
-        this.bonuses = bonuses;
-        this.deductions = deductions;
-        this.netSalary = netSalary;
-        this.payPeriod = payPeriod;
+    // Earnings breakdown
+    @Builder.Default
+    private Double basicSalary = 0.0;
+
+    @Builder.Default
+    private Double hra = 0.0; // House Rent Allowance
+
+    @Builder.Default
+    private Double specialAllowance = 0.0;
+
+    @Builder.Default
+    private Double bonuses = 0.0;
+
+    @Builder.Default
+    private Double grossSalary = 0.0;
+
+    // Deductions breakdown
+    @Builder.Default
+    private Double providentFund = 0.0; // PF
+
+    @Builder.Default
+    private Double professionalTax = 0.0;
+
+    @Builder.Default
+    private Double taxDeduction = 0.0; // TDS
+
+    @Builder.Default
+    private Double unpaidLeaveDeduction = 0.0;
+
+    @Builder.Default
+    private Double otherDeductions = 0.0;
+
+    @Builder.Default
+    private Double totalDeductions = 0.0;
+
+    // Net pay & Period details
+    @Builder.Default
+    private Double netSalary = 0.0;
+
+    @Column(nullable = false)
+    private String payPeriod; // e.g. "2026-06", "Jun 2026"
+
+    @Builder.Default
+    private String paymentStatus = "PAID"; // PAID, PENDING, PROCESSING
+
+    private LocalDate paymentDate;
+
+    private Integer totalWorkingDays;
+    private Integer daysWorked;
+    private Integer unpaidDays;
+
+    private String paymentMethod; // e.g. "Bank Transfer"
+    private String bankAccountNumber; // Masked e.g. "•••• 4321"
+
+    // Backward compatibility getters/setters if any legacy code refers to baseSalary or deductions
+    public Double getBaseSalary() {
+        return basicSalary;
     }
 
-    public Long getId() {
-        return id;
+    public void setBaseSalary(Double baseSalary) {
+        this.basicSalary = baseSalary != null ? baseSalary : 0.0;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    public Double getDeductions() {
+        return totalDeductions;
     }
 
-    public Long getEmployeeId() {
-        return employeeId;
-    }
-
-    public void setEmployeeId(Long employeeId) {
-        this.employeeId = employeeId;
-    }
-
-    public double getBaseSalary() {
-        return baseSalary;
-    }
-
-    public void setBaseSalary(double baseSalary) {
-        this.baseSalary = baseSalary;
-    }
-
-    public double getBonuses() {
-        return bonuses;
-    }
-
-    public void setBonuses(double bonuses) {
-        this.bonuses = bonuses;
-    }
-
-    public double getDeductions() {
-        return deductions;
-    }
-
-    public void setDeductions(double deductions) {
-        this.deductions = deductions;
-    }
-
-    public double getNetSalary() {
-        return netSalary;
-    }
-
-    public void setNetSalary(double netSalary) {
-        this.netSalary = netSalary;
-    }
-
-    public String getPayPeriod() {
-        return payPeriod;
-    }
-
-    public void setPayPeriod(String payPeriod) {
-        this.payPeriod = payPeriod;
+    public void setDeductions(Double deductions) {
+        this.totalDeductions = deductions != null ? deductions : 0.0;
     }
 }

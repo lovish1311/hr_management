@@ -12,8 +12,8 @@ This app is an HR management system for handling employee-related work in one pl
 | **1. Authentication** | ✅ Implemented (JWT, RBAC, Password Hashing) | ✅ Implemented (Login Screen, Token Storage, Router Guards) | ✅ **Completed** |
 | **2. Dashboard** | ✅ Implemented (Stats API, Employee & Department Metrics) | ✅ Implemented (Dashboard Screen, KPI Cards, Events Widget) | ✅ **Completed** |
 | **3. Employee Management** | ✅ Implemented (CRUD APIs, Search, Department Filter) | ✅ Implemented (Directory View, Profile Details Page) | ✅ **Completed** |
-| **4. Attendance Management** | ✅ Implemented (Check-in/out, History, Late/Absent Tracking) | ⏳ In Progress / Pending UI | ⏳ **Backend Ready** |
-| **5. Leave Management** | ✅ Implemented (Apply, Approve/Reject, Balance, History) | ⏳ Partial (`leave_request_tile` component created) | ⏳ **Backend Ready / UI In Progress** |
+| **4. Attendance & Biometric Beautifier** | ✅ Implemented (Auto-Beautify Excel Import via Python, Check-in/out, History) | ✅ Implemented (Attendance Calendar & Biometric Import UI) | ✅ **Completed** |
+| **5. Leave Management & Policy Engine** | ✅ Implemented (Full/Half Day, Short Break/Early Out, Deductions, Auto Sync) | ✅ Implemented (Apply Form, HR/Admin Approval Dashboard, Calendar Sync) | ✅ **Completed** |
 | **6. Payroll Management** | ✅ Implemented (Salary Records, Monthly Summary, Payslips) | ❌ Pending | ⏳ **Backend Ready** |
 | **7. Recruitment** | ✅ Implemented (Job Postings, Candidate Applications) | ❌ Pending | ⏳ **Backend Ready** |
 | **8. Performance Management** | ✅ Implemented (Goals, Reviews, Ratings & Feedback) | ❌ Pending | ⏳ **Backend Ready** |
@@ -60,19 +60,23 @@ This app is an HR management system for handling employee-related work in one pl
   - Interactive employee card components (`employee_card.dart`).
   - API repository implementation with offline/dummy fallback for resilient testing.
 
-### 4. Attendance Management (Backend Complete)
-- **Backend**:
-  - Endpoints for marking daily attendance, check-in, and check-out (`/api/v1/attendance`) ([AttendanceController.java](file:///c:/Users/Lovish/Projects/hr_management/src/main/java/com/example/hr_management_backend/features/attendance/controller/AttendanceController.java)).
-  - Attendance history, filtering by date ranges and employee ID.
-  - Automatic late and absent tracking logic.
+### 4. Attendance Management & Automated Biometric Import (Fully Functional)
+- **Automated Excel Beautifier Integration**:
+  - Automatically executes Python script (`attendance_beautifier.py`) upon uploading raw biometric Excel files at `/api/v1/attendance/import-biometric`.
+  - Re-formats columns, cleans employee names, standardizes `In 1`, `Out 1`, `In 2`, `Out 2` timestamps into AM/PM, and calculates exact working hours.
+- **Backend & UI**:
+  - Endpoints for marking daily attendance, check-in, check-out, and biometric excel import ([AttendanceController.java](file:///c:/Users/Lovish/Projects/hr_management/src/main/java/com/example/hr_management_backend/features/attendance/controller/AttendanceController.java)).
+  - Attendance history, calendar month view, filtering by employee ID and date ranges.
 
-### 5. Leave Management (Backend Complete & Partial UI)
-- **Backend**:
-  - Submit leave requests with start/end dates, leave types, and reasons (`/api/v1/leaves`) ([LeaveController.java](file:///c:/Users/Lovish/Projects/hr_management/src/main/java/com/example/hr_management_backend/features/leaves/controller/LeaveController.java)).
-  - Manager/Admin approval and rejection workflows (`/api/v1/leaves/{id}/status`).
-  - Leave balance and request history tracking.
-- **Frontend**:
-  - Core leave request preview widget (`leave_request_tile.dart`).
+### 5. Leave Management & Policy Engine (Fully Functional)
+- **Leave Policy Engine**:
+  - Full-day leaves (Casual, Sick, Earned, WFH), Half-day leaves (Session 1, Session 2), Short Break & Early Out permission requests.
+  - Deduction Modes supported: `UNIT_SEPARATE` (quota limit with 0.5-day CL penalty for 3rd+ unit), `UNIT_COMBINED`, `HOURLY_SEPARATE`, and `HOURLY_COMBINED`.
+  - Double-booking protection (same-session overlap validation) and rejection protection (balance unchanged if rejected).
+  - Automatic sync with daily Attendance records upon HR/Admin approval.
+- **Frontend & Verification**:
+  - Multi-role Leave Application, Management, and Approval UI pages in Flutter.
+  - End-to-End Playwright visual & balance verification suite (`test_full_leave_suite.py` and `test_time_off_deductions.py`).
 
 ### 6. Payroll, Performance, Recruitment & Settings (Backend Complete)
 - **Backend**:
@@ -83,37 +87,21 @@ This app is an HR management system for handling employee-related work in one pl
 
 ---
 
-## ⏳ Features Yet to be Implemented / Roadmap
+## ⏳ Pending Items & Advanced Roadmap
 
-### 1. Frontend UI Screens (Immediate Next Steps)
-- [ ] **Attendance Management UI**:
-  - Check-in / Check-out button widget & timer.
-  - Calendar/List view for monthly attendance history.
-- [ ] **Leave Management UI**:
-  - Interactive "Apply for Leave" modal & form.
-  - Admin/Manager Leave Approval dashboard.
-  - Leave balance visualization cards.
-- [ ] **Payroll Management UI**:
-  - Payslip view & PDF download trigger.
-  - Monthly payroll summary charts.
-- [ ] **Recruitment Portal UI**:
-  - Job openings directory & applicant submission view.
-- [ ] **Performance Management UI**:
-  - Performance review scorecards and feedback forms.
-- [ ] **Settings & User Profile UI**:
-  - Edit profile page & password change modal.
-  - Dark mode / Light mode theme toggle setting.
+### 1. Leave System Advanced Roadmap
+- [ ] **Medical Certificate Attachment Upload**: Support uploading doctor's note / proof for Sick Leaves exceeding 2 days.
+- [ ] **Weekend & Public Holiday Exclusion Engine**: Auto-exclude non-working days/holidays from total leave duration calculations (e.g. Fri-Mon = 2 leave days).
+- [ ] **Yearly Carry-Forward & Encashment**: Scheduled Jan 1st cron job for Earned Leave rollover and Casual/Sick leave resets.
+- [ ] **Monthly Accrual Engine**: Incremental credit of 1.5 Earned Leaves per completed month instead of annual upfront allocation.
+- [ ] **Work Handover / Cover Person Selection**: Selecting a colleague to cover duties during leave.
 
-### 2. Backend & System Enhancements
-- [ ] **Push & In-App Notifications Module**:
-  - Real-time alert trigger when leave is approved/rejected.
-  - Attendance reminder cron/notifications.
-- [ ] **Database Migration Scripts**:
-  - Flyway / Liquibase SQL migration scripts for schema versioning in production.
-- [ ] **Redis Caching**:
-  - Cache low-frequency read APIs (e.g. Dashboard stats, Settings).
-
----
+### 2. UI Screens & System Enhancements
+- [ ] **Payroll UI**: Payslip preview widget, salary breakdown modal, and PDF download trigger.
+- [ ] **Recruitment Portal UI**: Candidate application tracking dashboard and job vacancy manager.
+- [ ] **Performance UI**: Quarterly review scorecards and performance goal setup forms.
+- [ ] **Notifications Module**: In-app notifications & email alerts for leave approvals and attendance warnings.
+- [ ] **Redis Caching & Concurrency Locking**: Redis caching for read-heavy APIs and DB pessimistic locking during balance deductions.
 
 ## 👥 Main Users & Role Permissions
 - **HR Admin**: Full access to employee records, payroll, recruitment, company settings, and system reports.
