@@ -68,6 +68,7 @@ public class QuotaValidationRule implements LeavePolicyRule {
             remaining = switch (normType) {
                 case "SICK" -> balance.getSickLeaveRemaining();
                 case "EARNED" -> balance.getEarnedLeaveRemaining();
+                case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.getRestrictedHolidayRemaining();
                 default -> balance.getCasualLeaveRemaining();
             };
         }

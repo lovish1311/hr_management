@@ -37,6 +37,7 @@ public class AttendanceService {
     private final LeaveRequestRepository leaveRequestRepository;
     private final EmployeeRepository employeeRepository;
     private final SettingsService settingsService;
+    private final com.example.hr_management_backend.features.holidays.repository.HolidayRepository holidayRepository;
 
     @Transactional
     public Attendance markAttendance(Long employeeId, String status) {
@@ -244,11 +245,20 @@ public class AttendanceService {
         // Fetch approved and pending leave requests scoped to this month (P3: avoids loading entire history)
         List<LeaveRequest> leaves = leaveRequestRepository.findActiveAndPendingInRange(employeeId, startOfMonth, endOfMonth);
 
+        // Fetch active General Holidays for the month in a single batch query
+        Map<LocalDate, com.example.hr_management_backend.features.holidays.model.Holiday> generalHolidayMap = holidayRepository
+                .findActiveGeneralHolidaysBetween(startOfMonth, endOfMonth)
+                .stream()
+                .collect(Collectors.toMap(com.example.hr_management_backend.features.holidays.model.Holiday::getDate, h -> h, (h1, h2) -> h1));
+
         List<AttendanceCalendarDayDto> summaryList = new ArrayList<>();
 
         for (LocalDate date = startOfMonth; !date.isAfter(endOfMonth); date = date.plusDays(1)) {
             boolean isWeekend = date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY;
             final LocalDate current = date;
+
+            com.example.hr_management_backend.features.holidays.model.Holiday generalHoliday = generalHolidayMap.get(current);
+            boolean isHoliday = generalHoliday != null;
 
             // Find ALL matching leaves for this date (not just the first one)
             List<LeaveRequest> dayLeaves = leaves.stream()
@@ -282,6 +292,14 @@ public class AttendanceService {
             if (isWeekend) {
                 status = "WEEKEND";
                 statusLabel = "Weekend";
+            } else if (isHoliday) {
+                if (checkIn != null) {
+                    status = "PRESENT";
+                    statusLabel = "Present (Holiday: " + generalHoliday.getName() + ")";
+                } else {
+                    status = "HOLIDAY";
+                    statusLabel = generalHoliday.getName() + " (Holiday)";
+                }
             } else if (activeLeave != null && "PENDING".equalsIgnoreCase(activeLeave.getStatus())) {
                 status = "PENDING_LEAVE";
                 statusLabel = "Pending " + (leaveType != null ? leaveType.toUpperCase().replaceAll("_", " ") : "Leave") + " Approval";
@@ -400,7 +418,7 @@ public class AttendanceService {
                     .checkInTime(checkIn)
                     .checkOutTime(checkOut)
                     .isWeekend(isWeekend)
-                    .isHoliday(false)
+                    .isHoliday(isHoliday)
                     .leaveRequestId(activeLeave != null ? activeLeave.getId() : null)
                     .totalWorkingMinutes(attendance != null ? attendance.getTotalWorkingMinutes() : 0)
                     .build());

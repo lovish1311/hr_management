@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.Year;
 import java.util.List;
@@ -21,8 +23,11 @@ public class LeaveController {
     private final LeaveService leaveService;
 
     @PostMapping("/apply")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<LeaveRequest> applyForLeave(@RequestBody LeaveRequest request) {
-        return ResponseEntity.ok(leaveService.applyForLeave(request));
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String email = auth.getName();
+        return ResponseEntity.ok(leaveService.applyForLeave(request, email));
     }
 
     @GetMapping("/balance/{employeeId}")
@@ -44,15 +49,11 @@ public class LeaveController {
             @RequestBody Map<String, String> body) {
         String status = body.get("status");
         String rejectionReason = body.get("rejectionReason");
-        Long approverId = null;
-        try {
-            String rawId = body.get("approverId");
-            if (rawId != null && !rawId.isBlank()) approverId = Long.parseLong(rawId);
-        } catch (NumberFormatException e) {
-            return ResponseEntity.badRequest().build();
-        }
+        
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String actorEmail = auth.getName();
 
-        LeaveRequest updated = leaveService.updateStatus(id, status, rejectionReason, approverId);
+        LeaveRequest updated = leaveService.updateStatus(id, status, rejectionReason, actorEmail);
         return ResponseEntity.ok(updated);
     }
 
@@ -139,12 +140,14 @@ public class LeaveController {
     }
 
     @DeleteMapping("/clear/all")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<Map<String, String>> clearAllLeaveData() {
         leaveService.clearAllLeaveData();
         return ResponseEntity.ok(Map.of("message", "All leave requests, permissions, short breaks, and balances cleared successfully across all employees."));
     }
 
     @DeleteMapping("/clear/employee/{employeeId}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<Map<String, String>> clearEmployeeLeaveData(@PathVariable Long employeeId) {
         leaveService.clearEmployeeLeaveData(employeeId);
         return ResponseEntity.ok(Map.of("message", "All leave requests, permissions, short breaks, and balance reset successfully for employee ID " + employeeId));

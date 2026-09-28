@@ -47,6 +47,12 @@ public class LeaveBalance {
     @Builder.Default
     private Double workFromHomeUsed = 0.0;
 
+    @Builder.Default
+    private Double restrictedHolidayQuota = 0.0;
+
+    @Builder.Default
+    private Double restrictedHolidayUsed = 0.0;
+
     @Transient
     @Builder.Default
     private Double casualLeavePending = 0.0;
@@ -62,6 +68,10 @@ public class LeaveBalance {
     @Transient
     @Builder.Default
     private Double workFromHomePending = 0.0;
+
+    @Transient
+    @Builder.Default
+    private Double restrictedHolidayPending = 0.0;
 
     public double getCasualLeaveRemaining() {
         double quota = casualLeaveQuota != null ? casualLeaveQuota : 12.0;
@@ -88,6 +98,13 @@ public class LeaveBalance {
         double quota = workFromHomeQuota != null ? workFromHomeQuota : 0.0;
         double used = workFromHomeUsed != null ? workFromHomeUsed : 0.0;
         double pending = workFromHomePending != null ? workFromHomePending : 0.0;
+        return Math.max(0.0, quota - used - pending);
+    }
+
+    public double getRestrictedHolidayRemaining() {
+        double quota = restrictedHolidayQuota != null ? restrictedHolidayQuota : 0.0;
+        double used = restrictedHolidayUsed != null ? restrictedHolidayUsed : 0.0;
+        double pending = restrictedHolidayPending != null ? restrictedHolidayPending : 0.0;
         return Math.max(0.0, quota - used - pending);
     }
 }

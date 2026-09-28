@@ -23,6 +23,10 @@ public class LeaveRequest {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Version
+    @Column(columnDefinition = "bigint default 0")
+    private Long version;
+
     @Column(nullable = false)
     private Long employeeId;
 
@@ -33,7 +37,7 @@ public class LeaveRequest {
     private LocalDate endDate;
 
     @Builder.Default
-    private String leaveType = "CASUAL"; // CASUAL, SICK, EARNED, UNPAID
+    private String leaveType = "CASUAL"; // CASUAL, SICK, EARNED, UNPAID, RESTRICTED_HOLIDAY
 
     @Builder.Default
     private Double totalDays = 1.0;

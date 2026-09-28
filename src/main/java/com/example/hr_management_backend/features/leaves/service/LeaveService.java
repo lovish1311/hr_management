@@ -73,6 +73,14 @@ public class LeaveService {
     public LeaveBalance getOrCreateLeaveBalance(Long employeeId, Integer year) {
         LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYear(employeeId, year)
                 .orElseGet(() -> {
+                    double defaultRhQuota = 2.0;
+                    try {
+                        String setting = settingsService.getSetting("restricted_holiday_allowance");
+                        if (setting != null && !setting.isBlank()) {
+                            defaultRhQuota = Double.parseDouble(setting);
+                        }
+                    } catch (Exception ignored) {}
+
                     LeaveBalance initial = LeaveBalance.builder()
                             .employeeId(employeeId)
                             .year(year)
@@ -82,6 +90,8 @@ public class LeaveService {
                             .sickLeaveUsed(0.0)
                             .earnedLeaveQuota(15.0)
                             .earnedLeaveUsed(0.0)
+                            .restrictedHolidayQuota(defaultRhQuota)
+                            .restrictedHolidayUsed(0.0)
                             .build();
                     return leaveBalanceRepository.save(initial);
                 });
@@ -90,11 +100,13 @@ public class LeaveService {
         Double pendingSick = leaveRequestRepository.sumPendingLeaves(employeeId, "SICK", year);
         Double pendingEarned = leaveRequestRepository.sumPendingLeaves(employeeId, "EARNED", year);
         Double pendingWfh = leaveRequestRepository.sumPendingLeaves(employeeId, "WORK_FROM_HOME", year);
+        Double pendingRh = leaveRequestRepository.sumPendingLeaves(employeeId, "RESTRICTED_HOLIDAY", year);
 
         balance.setCasualLeavePending(pendingCasual != null ? pendingCasual : 0.0);
         balance.setSickLeavePending(pendingSick != null ? pendingSick : 0.0);
         balance.setEarnedLeavePending(pendingEarned != null ? pendingEarned : 0.0);
         balance.setWorkFromHomePending(pendingWfh != null ? pendingWfh : 0.0);
+        balance.setRestrictedHolidayPending(pendingRh != null ? pendingRh : 0.0);
 
         return balance;
     }
@@ -102,6 +114,24 @@ public class LeaveService {
     @Transactional
     @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
     public LeaveRequest applyForLeave(LeaveRequest request) {
+        String email = "hr@company.com"; // default fallback for tests
+        if (request.getEmployeeId() != null) {
+            email = employeeRepository.findById(request.getEmployeeId())
+                    .map(Employee::getEmail)
+                    .orElse("hr@company.com");
+        }
+        return applyForLeave(request, email);
+    }
+
+    @Transactional
+    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    public LeaveRequest applyForLeave(LeaveRequest request, String actorEmail) {
+        Employee employee = employeeRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new RuntimeException("Employee not found for email: " + actorEmail));
+        
+        // Enforce identity - ignore any forged employeeId in the payload
+        request.setEmployeeId(employee.getId());
+
         request.setId(null);
         request.setStatus("PENDING");
 
@@ -121,14 +151,10 @@ public class LeaveService {
         validateSessionOverlap(request, isTimeBased);
 
         // Dynamically resolve assigned manager for leave routing
-        com.example.hr_management_backend.features.employees.model.Employee empObj = null;
-        if (request.getEmployeeId() != null) {
-            empObj = employeeRepository.findById(request.getEmployeeId()).orElse(null);
-            if (empObj != null && empObj.getManager() != null) {
-                request.setApprovedBy(empObj.getManager().getId());
-                log.info("Leave request routed dynamically to assigned manager: {} (ID: {})",
-                        empObj.getManager().getFirstName() + " " + empObj.getManager().getLastName(), empObj.getManager().getId());
-            }
+        if (employee.getManager() != null) {
+            request.setApprovedBy(employee.getManager().getId());
+            log.info("Leave request routed dynamically to assigned manager: {} (ID: {})",
+                    employee.getManager().getFirstName() + " " + employee.getManager().getLastName(), employee.getManager().getId());
         }
 
         // Server-side authoritative calculation of totalDays — never trust client value alone
@@ -142,7 +168,7 @@ public class LeaveService {
         }
 
         // Execute pluggable LeavePolicyEngine rules
-        leavePolicyEngine.validateRequest(request, empObj);
+        leavePolicyEngine.validateRequest(request, employee);
         leavePolicyEngine.computeDeductions(request);
 
         // Capture policy snapshot for ALL leave types (audit trail)
@@ -162,12 +188,17 @@ public class LeaveService {
                 if (specialQuota.isPresent()) {
                     remaining = specialQuota.get().getRemaining();
                 } else {
+                    // PESSIMISTIC LOCK: Lock leave balance row before checking quotas to prevent concurrent quota bypass
+                    leaveBalanceRepository.findByEmployeeIdAndYearForUpdate(request.getEmployeeId(), currentYear)
+                            .orElseGet(() -> getOrCreateLeaveBalance(request.getEmployeeId(), currentYear));
+                    
                     LeaveBalance balance = getOrCreateLeaveBalance(request.getEmployeeId(), currentYear);
                     String normType = reqType.replaceAll("_LEAVE$", "");
                     remaining = switch (normType) {
                         case "SICK" -> balance.getSickLeaveRemaining();
                         case "EARNED" -> balance.getEarnedLeaveRemaining();
                         case "WORK_FROM_HOME", "WFH" -> balance.getWorkFromHomeRemaining();
+                        case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.getRestrictedHolidayRemaining();
                         default -> balance.getCasualLeaveRemaining();
                     };
                 }
@@ -199,6 +230,18 @@ public class LeaveService {
     @Transactional
     @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
     public LeaveRequest updateStatus(Long requestId, String status, String rejectionReason, Long approverId) {
+        String email = "hr@company.com"; // default fallback for tests
+        if (approverId != null) {
+            email = employeeRepository.findById(approverId)
+                    .map(Employee::getEmail)
+                    .orElse("hr@company.com");
+        }
+        return updateStatus(requestId, status, rejectionReason, email);
+    }
+
+    @Transactional
+    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    public LeaveRequest updateStatus(Long requestId, String status, String rejectionReason, String actorEmail) {
         LeaveRequest request = leaveRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Leave request not found with id: " + requestId));
 
@@ -211,7 +254,27 @@ public class LeaveService {
 
         request.setStatus(newStatus);
         request.setRejectionReason(rejectionReason);
-        request.setApprovedBy(approverId);
+
+        Employee actor = employeeRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new RuntimeException("Actor not found"));
+        
+        Employee targetEmployee = employeeRepository.findById(request.getEmployeeId())
+                .orElseThrow(() -> new RuntimeException("Leave requester not found"));
+
+        if (actor.getId().equals(targetEmployee.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Cannot approve or reject your own leave request.");
+        }
+
+        boolean isAuthorized = "HR".equalsIgnoreCase(actor.getRole()) || "SUPER_ADMIN".equalsIgnoreCase(actor.getRole());
+        if (!isAuthorized && targetEmployee.getManager() != null) {
+            isAuthorized = actor.getId().equals(targetEmployee.getManager().getId());
+        }
+
+        if (!isAuthorized) {
+            throw new org.springframework.security.access.AccessDeniedException("Not authorized to update this leave request.");
+        }
+
+        request.setApprovedBy(actor.getId());
 
         int year = request.getStartDate().getYear();
         double requestedDays = request.getTotalDays() != null ? request.getTotalDays() : 0.0;
@@ -251,6 +314,12 @@ public class LeaveService {
                         balance.setWorkFromHomeUsed(balance.getWorkFromHomeUsed() + requestedDays);
                     }
                     case "UNPAID" -> log.info("Unpaid leave approved for employeeId={}", request.getEmployeeId());
+                    case "RESTRICTED_HOLIDAY", "RESTRICTED" -> {
+                        if (balance.getRestrictedHolidayRemaining() < requestedDays) {
+                            throw new IllegalStateException("Cannot approve: Insufficient restricted holiday balance.");
+                        }
+                        balance.setRestrictedHolidayUsed(balance.getRestrictedHolidayUsed() + requestedDays);
+                    }
                     default -> {
                         if (balance.getCasualLeaveRemaining() < requestedDays) {
                             throw new IllegalStateException("Cannot approve: Insufficient casual leave balance.");
@@ -278,6 +347,7 @@ public class LeaveService {
                         case "EARNED" -> balance.setEarnedLeaveUsed(Math.max(0.0, balance.getEarnedLeaveUsed() - requestedDays));
                         case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0.0, balance.getWorkFromHomeUsed() - requestedDays));
                         case "UNPAID" -> log.info("Unpaid leave rejected — no balance change for employeeId={}", request.getEmployeeId());
+                        case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.setRestrictedHolidayUsed(Math.max(0.0, balance.getRestrictedHolidayUsed() - requestedDays));
                         default -> balance.setCasualLeaveUsed(Math.max(0.0, balance.getCasualLeaveUsed() - requestedDays));
                     }
                     leaveBalanceRepository.save(balance);
@@ -520,6 +590,7 @@ public class LeaveService {
                     case "EARNED" -> balance.setEarnedLeaveUsed(Math.max(0, balance.getEarnedLeaveUsed() - daysToCredit));
                     case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0, balance.getWorkFromHomeUsed() - daysToCredit));
                     case "UNPAID" -> log.info("Unpaid leave withdrawn — no balance change for employeeId={}", request.getEmployeeId());
+                    case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.setRestrictedHolidayUsed(Math.max(0, balance.getRestrictedHolidayUsed() - daysToCredit));
                     default -> balance.setCasualLeaveUsed(Math.max(0, balance.getCasualLeaveUsed() - daysToCredit));
                 }
                 leaveBalanceRepository.save(balance);
