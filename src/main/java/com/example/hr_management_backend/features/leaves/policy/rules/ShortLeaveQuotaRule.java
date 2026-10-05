@@ -39,60 +39,28 @@ public class ShortLeaveQuotaRule implements LeavePolicyRule {
             return;
         }
 
-        // Count short leaves applied in the same month
-        if (request.getEmployeeId() != null && request.getStartDate() != null) {
-            LocalDate start = request.getStartDate();
-            List<LeaveRequest> allRequests = leaveRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(request.getEmployeeId());
-
-            long shortLeavesThisMonth = allRequests.stream()
-                    .filter(r -> {
-                        if (request.getId() != null && request.getId().equals(r.getId())) return false;
-                        String st = r.getStatus() != null ? r.getStatus().toUpperCase() : "";
-                        if ("REJECTED".equals(st) || "CANCELLED".equals(st) || "WITHDRAWN".equals(st)) return false;
-
-                        String rType = r.getLeaveType() != null ? r.getLeaveType().toUpperCase() : "";
-                        boolean rTime = Boolean.TRUE.equals(r.getIsTimeBased()) || rType.contains("SHORT") || rType.contains("EARLY") || rType.contains("LATE");
-                        return rTime && r.getStartDate() != null
-                                && r.getStartDate().getYear() == start.getYear()
-                                && r.getStartDate().getMonth() == start.getMonth();
-                    }).count();
-
-            if (shortLeavesThisMonth >= MAX_FREE_SHORT_LEAVES_PER_MONTH) {
-                log.info("EmployeeId={} applying short leave #{}. Exceeded free monthly limit ({}). 0.5 Casual Leave deduction penalty triggered.",
-                        request.getEmployeeId(), shortLeavesThisMonth + 1, MAX_FREE_SHORT_LEAVES_PER_MONTH);
-                // Flag deduction on request
-                request.setReason(request.getReason() + " [Quota Exceeded: 0.5 Day Penalty Applied]");
-                request.setTotalDays(0.5);
+        // Enforce max 2 hours (120 minutes) duration for intra-day permissions
+        if (request.getStartTime() != null && request.getEndTime() != null) {
+            long minutes = java.time.Duration.between(request.getStartTime(), request.getEndTime()).toMinutes();
+            if (minutes <= 0) {
+                throw new IllegalArgumentException("End time must be strictly after start time.");
+            }
+            if (minutes > 120) {
+                throw new IllegalStateException("Intra-day permission duration cannot exceed 2 hours (120 minutes). Requested: " + minutes + " minutes.");
             }
         }
+
+        // Time-based permissions are logged for HR transparency without automated salary/leave deductions
+        request.setTotalDays(0.0);
     }
 
     @Override
     public void computeDeduction(LeaveRequest request) {
         String type = request.getLeaveType() != null ? request.getLeaveType().toUpperCase() : "";
         boolean isTimeBased = type.contains("SHORT") || type.contains("EARLY") || type.contains("LATE");
-        if (!isTimeBased) return;
-
-        if (request.getEmployeeId() != null && request.getStartDate() != null) {
-            LocalDate start = request.getStartDate();
-            List<LeaveRequest> allRequests = leaveRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(request.getEmployeeId());
-
-            long shortLeavesThisMonth = allRequests.stream()
-                    .filter(r -> {
-                        if (request.getId() != null && request.getId().equals(r.getId())) return false;
-                        String st = r.getStatus() != null ? r.getStatus().toUpperCase() : "";
-                        if ("REJECTED".equals(st) || "CANCELLED".equals(st) || "WITHDRAWN".equals(st)) return false;
-
-                        String rType = r.getLeaveType() != null ? r.getLeaveType().toUpperCase() : "";
-                        boolean rTime = Boolean.TRUE.equals(r.getIsTimeBased()) || rType.contains("SHORT") || rType.contains("EARLY") || rType.contains("LATE");
-                        return rTime && r.getStartDate() != null
-                                && r.getStartDate().getYear() == start.getYear()
-                                && r.getStartDate().getMonth() == start.getMonth();
-                    }).count();
-
-            if (shortLeavesThisMonth >= MAX_FREE_SHORT_LEAVES_PER_MONTH) {
-                request.setTotalDays(0.5);
-            }
+        if (isTimeBased) {
+            // Strictly zero automated deduction for intra-day permissions
+            request.setTotalDays(0.0);
         }
     }
 }

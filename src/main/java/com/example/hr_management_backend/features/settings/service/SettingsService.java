@@ -22,21 +22,42 @@ public class SettingsService {
 
     @PostConstruct
     public void init() {
-        if (settingRepository.count() == 0) {
-            settingRepository.save(new Setting("theme", "light"));
-            settingRepository.save(new Setting("companyName", "Default Corp"));
-            settingRepository.save(new Setting("workHoursStart", "09:00"));
-            settingRepository.save(new Setting("workHoursEnd", "17:00"));
-            settingRepository.save(new Setting("shiftStartTime", "09:00"));
-            settingRepository.save(new Setting("shiftEndTime", "18:00"));
-            settingRepository.save(new Setting("lateArrivalGraceMinutes", "15"));
-            settingRepository.save(new Setting("earlyOutGraceMinutes", "0"));
-            settingRepository.save(new Setting("time_off_policy_mode", "UNITWISE"));
-            settingRepository.save(new Setting("time_off_cycle", "Monthly"));
-            settingRepository.save(new Setting("time_off_short_break_unit_limit", "2"));
-            settingRepository.save(new Setting("time_off_early_out_unit_limit", "2"));
-            settingRepository.save(new Setting("time_off_late_arrival_unit_limit", "2"));
-            settingRepository.save(new Setting("time_off_hourly_limit", "4"));
+        saveOrUpdateDefault("theme", "light");
+        saveOrUpdateDefault("companyName", "Default Corp");
+        saveOrUpdateDefault("workHoursStart", "10:00");
+        saveOrUpdateDefault("workHoursEnd", "19:00");
+        saveOrUpdateDefault("shiftStartTime", "10:00");
+        saveOrUpdateDefault("shiftEndTime", "19:00");
+        saveOrUpdateDefault("lunchStartTime", "14:00");
+        saveOrUpdateDefault("lunchEndTime", "15:00");
+        saveOrUpdateDefault("lateArrivalGraceMinutes", "15");
+        saveOrUpdateDefault("earlyOutGraceMinutes", "0");
+        saveOrUpdateDefault("time_off_policy_mode", "UNITWISE");
+        saveOrUpdateDefault("time_off_cycle", "Monthly");
+        saveOrUpdateDefault("time_off_short_break_unit_limit", "2");
+        saveOrUpdateDefault("time_off_early_out_unit_limit", "2");
+        saveOrUpdateDefault("time_off_late_arrival_unit_limit", "2");
+        saveOrUpdateDefault("time_off_hourly_limit", "2");
+        saveOrUpdateDefault("restricted_holiday_allowance", "2");
+    }
+
+    private void saveOrUpdateDefault(String key, String defaultValue) {
+        var opt = settingRepository.findById(key);
+        if (opt.isEmpty()) {
+            settingRepository.save(new Setting(key, defaultValue));
+        } else {
+            String val = opt.get().getKeyValue();
+            if ("shiftStartTime".equals(key) && "09:00".equals(val)) {
+                settingRepository.save(new Setting(key, defaultValue));
+            } else if ("shiftEndTime".equals(key) && "18:00".equals(val)) {
+                settingRepository.save(new Setting(key, defaultValue));
+            } else if ("workHoursStart".equals(key) && "09:00".equals(val)) {
+                settingRepository.save(new Setting(key, defaultValue));
+            } else if ("workHoursEnd".equals(key) && ("17:00".equals(val) || "18:00".equals(val))) {
+                settingRepository.save(new Setting(key, defaultValue));
+            } else if ("time_off_hourly_limit".equals(key) && "4".equals(val)) {
+                settingRepository.save(new Setting(key, defaultValue));
+            }
         }
     }
 

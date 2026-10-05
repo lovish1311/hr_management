@@ -41,6 +41,16 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+    <script>
+    // Defensive guard against DWDS / Flutter Web hot-reload removeChild race condition
+    window.addEventListener('error', function(event) {
+      if (event && event.message && event.message.includes("Cannot read properties of null (reading 'removeChild')")) {
+        event.stopImmediatePropagation();
+        event.preventDefault();
+        return true;
+      }
+    });
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

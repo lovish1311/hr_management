@@ -8,6 +8,8 @@ import com.example.hr_management_backend.features.leaves.model.LeaveBalance;
 import com.example.hr_management_backend.features.leaves.model.LeaveRequest;
 import com.example.hr_management_backend.features.leaves.repository.LeaveBalanceRepository;
 import com.example.hr_management_backend.features.leaves.repository.LeaveRequestRepository;
+import com.example.hr_management_backend.features.attendance.model.Attendance;
+import com.example.hr_management_backend.features.attendance.repository.AttendanceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -15,7 +17,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -26,6 +31,7 @@ public class DataInitializer implements CommandLineRunner {
     private final EmployeeRepository employeeRepository;
     private final LeaveBalanceRepository leaveBalanceRepository;
     private final LeaveRequestRepository leaveRequestRepository;
+    private final AttendanceRepository attendanceRepository;
     private final PasswordEncoder passwordEncoder;
     private final com.example.hr_management_backend.features.payroll.service.PayrollService payrollService;
 
@@ -95,12 +101,16 @@ public class DataInitializer implements CommandLineRunner {
                     LeaveBalance balance = LeaveBalance.builder()
                             .employeeId(emp.getId())
                             .year(2026)
-                            .casualLeaveQuota(12.0)
+                            .casualLeaveQuota(6.0)
                             .casualLeaveUsed(1.0)
-                            .sickLeaveQuota(10.0)
+                            .sickLeaveQuota(6.0)
                             .sickLeaveUsed(2.0)
-                            .earnedLeaveQuota(15.0)
+                            .earnedLeaveQuota(6.0)
                             .earnedLeaveUsed(0.0)
+                            .workFromHomeQuota(0.0)
+                            .workFromHomeUsed(0.0)
+                            .restrictedHolidayQuota(2.0)
+                            .restrictedHolidayUsed(0.0)
                             .build();
                     leaveBalanceRepository.save(balance);
                 }
@@ -109,7 +119,17 @@ public class DataInitializer implements CommandLineRunner {
             // Seed 6-month historical payroll for demo employee (Lovish)
             payrollService.getPayrollHistory(lovish.getId());
 
-            log.info("Database successfully seeded with Aadisha Dhullar (HR), 3 Managers, all 29 Excel employees, and 6-month Payroll history!");
+            // Induce September 2026 Attendance, 2 Leaves, 2 Short Breaks, 3 Late, 1 Early Out for Lovish
+            seedLovishSeptemberAttendanceAndLeaves(lovish);
+
+            // Also seed realistic September 2026 demo attendance for Super Admin so test logins reflect live data
+            employeeRepository.findByEmail("admin@company.com").ifPresent(admin -> {
+                admin.setIsAttendanceTracked(true);
+                employeeRepository.save(admin);
+                seedLovishSeptemberAttendanceAndLeaves(admin);
+            });
+
+            log.info("Database successfully seeded with Aadisha Dhullar (HR), 3 Managers, all 29 Excel employees, Admin demo records, and 6-month Payroll history!");
     }
 
     private Employee createEmployee(String firstName, String lastName, String email, String dept, String designation, String role, String code, String biometricName, Employee manager, boolean isAttendanceTracked, String phone, String dob, String gender, String address) {
@@ -168,5 +188,147 @@ public class DataInitializer implements CommandLineRunner {
         user.setRole(role);
         user.setEmployeeId(employeeId);
         userRepository.save(user);
+    }
+
+    private void seedLovishSeptemberAttendanceAndLeaves(Employee lovish) {
+        Long empId = lovish.getId();
+        log.info("Seeding realistic September 2026 attendance and leave data for Lovish Kumar (empId={})...", empId);
+
+        // 1. Ensure 2026 Leave Balances reflect 2 leaves taken (Casual & Sick)
+        LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYear(empId, 2026)
+                .orElseGet(() -> LeaveBalance.builder().employeeId(empId).year(2026).build());
+        balance.setCasualLeaveQuota(6.0);
+        balance.setCasualLeaveUsed(1.0); // 5 remaining
+        balance.setSickLeaveQuota(6.0);
+        balance.setSickLeaveUsed(1.0);   // 5 remaining
+        balance.setEarnedLeaveQuota(6.0);
+        balance.setEarnedLeaveUsed(0.0); // 6 remaining
+        balance.setWorkFromHomeQuota(0.0);
+        balance.setWorkFromHomeUsed(0.0);
+        balance.setRestrictedHolidayQuota(2.0);
+        balance.setRestrictedHolidayUsed(0.0);
+        leaveBalanceRepository.save(balance);
+
+        // 2. Ensure Leave Requests for September 2026 (2 Full Leaves, 2 Short Breaks)
+        List<LeaveRequest> existingLeaves = leaveRequestRepository.findApprovedLeavesForEmployeeInRange(
+                empId, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+        leaveRequestRepository.deleteAll(existingLeaves);
+
+        // Leave 1: Casual Leave on Sep 4, 2026
+        LeaveRequest casualLeave = LeaveRequest.builder()
+                .employeeId(empId)
+                .startDate(LocalDate.of(2026, 9, 4))
+                .endDate(LocalDate.of(2026, 9, 4))
+                .leaveType("CASUAL")
+                .totalDays(1.0)
+                .isTimeBased(false)
+                .status("APPROVED")
+                .reason("Family event")
+                .build();
+
+        // Leave 2: Sick Leave on Sep 18, 2026
+        LeaveRequest sickLeave = LeaveRequest.builder()
+                .employeeId(empId)
+                .startDate(LocalDate.of(2026, 9, 18))
+                .endDate(LocalDate.of(2026, 9, 18))
+                .leaveType("SICK")
+                .totalDays(1.0)
+                .isTimeBased(false)
+                .status("APPROVED")
+                .reason("Seasonal fever and doctor consultation")
+                .build();
+
+        // Short Break 1: Sep 9, 2026 (11:30 AM - 12:15 PM)
+        LeaveRequest shortBreak1 = LeaveRequest.builder()
+                .employeeId(empId)
+                .startDate(LocalDate.of(2026, 9, 9))
+                .endDate(LocalDate.of(2026, 9, 9))
+                .leaveType("SHORT_BREAK")
+                .totalDays(0.0)
+                .isTimeBased(true)
+                .startTime(LocalTime.of(11, 30))
+                .endTime(LocalTime.of(12, 15))
+                .status("APPROVED")
+                .reason("Urgent banking errand")
+                .build();
+
+        // Short Break 2: Sep 22, 2026 (04:15 PM - 05:00 PM)
+        LeaveRequest shortBreak2 = LeaveRequest.builder()
+                .employeeId(empId)
+                .startDate(LocalDate.of(2026, 9, 22))
+                .endDate(LocalDate.of(2026, 9, 22))
+                .leaveType("SHORT_BREAK")
+                .totalDays(0.0)
+                .isTimeBased(true)
+                .startTime(LocalTime.of(16, 15))
+                .endTime(LocalTime.of(17, 0))
+                .status("APPROVED")
+                .reason("Medical prescription pickup")
+                .build();
+
+        leaveRequestRepository.saveAll(List.of(casualLeave, sickLeave, shortBreak1, shortBreak2));
+
+        // 3. Clean and Seed Attendance Records for all working days up to Sep 28, 2026
+        List<Attendance> existingAtt = attendanceRepository.findByEmployeeIdAndDateBetween(
+                empId, LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30));
+        attendanceRepository.deleteAll(existingAtt);
+
+        Map<LocalDate, AttendanceRecordSpec> schedule = new LinkedHashMap<>();
+        schedule.put(LocalDate.of(2026, 9, 1), new AttendanceRecordSpec(LocalTime.of(9, 20), LocalTime.of(18, 30), "PRESENT"));
+        schedule.put(LocalDate.of(2026, 9, 2), new AttendanceRecordSpec(LocalTime.of(9, 22), LocalTime.of(18, 35), "PRESENT"));
+        schedule.put(LocalDate.of(2026, 9, 3), new AttendanceRecordSpec(LocalTime.of(9, 18), LocalTime.of(18, 30), "PRESENT"));
+        // Sep 4 is Leave 1 (Full Day Casual Leave)
+        schedule.put(LocalDate.of(2026, 9, 7), new AttendanceRecordSpec(LocalTime.of(9, 25), LocalTime.of(18, 30), "PRESENT"));
+        schedule.put(LocalDate.of(2026, 9, 8), new AttendanceRecordSpec(LocalTime.of(9, 20), LocalTime.of(18, 32), "PRESENT"));
+        schedule.put(LocalDate.of(2026, 9, 9), new AttendanceRecordSpec(LocalTime.of(9, 21), LocalTime.of(18, 30), "PRESENT")); // + Short Break 1
+        schedule.put(LocalDate.of(2026, 9, 10), new AttendanceRecordSpec(LocalTime.of(9, 24), LocalTime.of(18, 30), "PRESENT"));
+        // Late Arrival 1: Sep 11 (10:00 AM - 15 mins after grace limit)
+        schedule.put(LocalDate.of(2026, 9, 11), new AttendanceRecordSpec(LocalTime.of(10, 0), LocalTime.of(18, 30), "LATE"));
+        schedule.put(LocalDate.of(2026, 9, 14), new AttendanceRecordSpec(LocalTime.of(9, 23), LocalTime.of(18, 30), "PRESENT"));
+        schedule.put(LocalDate.of(2026, 9, 15), new AttendanceRecordSpec(LocalTime.of(9, 20), LocalTime.of(18, 30), "PRESENT"));
+        // Late Arrival 2: Sep 16 (10:00 AM - 15 mins after grace limit)
+        schedule.put(LocalDate.of(2026, 9, 16), new AttendanceRecordSpec(LocalTime.of(10, 0), LocalTime.of(18, 30), "LATE"));
+        schedule.put(LocalDate.of(2026, 9, 17), new AttendanceRecordSpec(LocalTime.of(9, 25), LocalTime.of(18, 30), "PRESENT"));
+        // Sep 18 is Leave 2 (Full Day Sick Leave)
+        schedule.put(LocalDate.of(2026, 9, 21), new AttendanceRecordSpec(LocalTime.of(9, 22), LocalTime.of(18, 30), "PRESENT"));
+        schedule.put(LocalDate.of(2026, 9, 22), new AttendanceRecordSpec(LocalTime.of(9, 20), LocalTime.of(18, 30), "PRESENT")); // + Short Break 2
+        schedule.put(LocalDate.of(2026, 9, 23), new AttendanceRecordSpec(LocalTime.of(9, 24), LocalTime.of(18, 30), "PRESENT"));
+        // Early Out 1: Sep 24 (6:10 PM - 20 mins early before 6:30 PM)
+        schedule.put(LocalDate.of(2026, 9, 24), new AttendanceRecordSpec(LocalTime.of(9, 20), LocalTime.of(18, 10), "PRESENT"));
+        // Late Arrival 3: Sep 25 (10:00 AM - 15 mins after grace limit)
+        schedule.put(LocalDate.of(2026, 9, 25), new AttendanceRecordSpec(LocalTime.of(10, 0), LocalTime.of(18, 30), "LATE"));
+        // Today: Sep 28 (Present)
+        schedule.put(LocalDate.of(2026, 9, 28), new AttendanceRecordSpec(LocalTime.of(9, 20), LocalTime.of(18, 30), "PRESENT"));
+
+        for (Map.Entry<LocalDate, AttendanceRecordSpec> entry : schedule.entrySet()) {
+            LocalDate d = entry.getKey();
+            AttendanceRecordSpec spec = entry.getValue();
+
+            Attendance att = attendanceRepository.findByEmployeeIdAndDate(empId, d)
+                    .orElseGet(() -> {
+                        Attendance a = new Attendance();
+                        a.setEmployeeId(empId);
+                        a.setDate(d);
+                        return a;
+                    });
+            att.setCheckInTime(spec.in);
+            att.setCheckOutTime(spec.out);
+            att.setStatus(spec.status);
+            att.setTotalWorkingMinutes((int) java.time.Duration.between(spec.in, spec.out).toMinutes());
+            attendanceRepository.save(att);
+        }
+
+        log.info("Lovish Kumar September 2026 attendance seeded: 18 present, 3 late arrivals (15m past grace), 1 early departure (20m early), 2 full leaves, 2 short breaks.");
+    }
+
+    private static class AttendanceRecordSpec {
+        LocalTime in;
+        LocalTime out;
+        String status;
+        AttendanceRecordSpec(LocalTime in, LocalTime out, String status) {
+            this.in = in;
+            this.out = out;
+            this.status = status;
+        }
     }
 }

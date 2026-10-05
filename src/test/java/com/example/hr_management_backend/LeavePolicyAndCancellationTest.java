@@ -52,9 +52,13 @@ public class LeavePolicyAndCancellationTest {
 
         // Initialize fresh balance for testing
         LeaveBalance balance = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), LocalDate.now().getYear());
+        balance.setCasualLeaveQuota(6.0);
         balance.setCasualLeaveUsed(0.0);
+        balance.setSickLeaveQuota(6.0);
         balance.setSickLeaveUsed(0.0);
+        balance.setEarnedLeaveQuota(6.0);
         balance.setEarnedLeaveUsed(0.0);
+        balance.setWorkFromHomeQuota(0.0);
         balance.setWorkFromHomeUsed(0.0);
         leaveBalanceRepository.save(balance);
     }
@@ -82,7 +86,7 @@ public class LeavePolicyAndCancellationTest {
 
         // Verify balance unaffected
         LeaveBalance balance = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), LocalDate.now().getYear());
-        assertEquals(12.0, balance.getCasualLeaveRemaining());
+        assertEquals(6.0, balance.getCasualLeaveRemaining());
     }
 
     @Test
@@ -106,7 +110,7 @@ public class LeavePolicyAndCancellationTest {
 
         LeaveBalance balanceAfterApprove = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), LocalDate.now().getYear());
         assertEquals(2.0, balanceAfterApprove.getSickLeaveUsed());
-        assertEquals(8.0, balanceAfterApprove.getSickLeaveRemaining());
+        assertEquals(4.0, balanceAfterApprove.getSickLeaveRemaining());
 
         // Cancel approved leave
         LeaveRequest cancelled = leaveService.cancelLeaveRequest(saved.getId(), testEmployee.getId());
@@ -114,15 +118,15 @@ public class LeavePolicyAndCancellationTest {
 
         LeaveBalance balanceAfterCancel = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), LocalDate.now().getYear());
         assertEquals(0.0, balanceAfterCancel.getSickLeaveUsed());
-        assertEquals(10.0, balanceAfterCancel.getSickLeaveRemaining());
+        assertEquals(6.0, balanceAfterCancel.getSickLeaveRemaining());
     }
 
     @Test
-    @DisplayName("Scenario 3: Short leave quota enforcement — 3rd short leave in a month flags quota penalty")
+    @DisplayName("Scenario 3: Short leave and time-based permissions — permitted up to 2 hours with 0 days deduction")
     void testShortLeaveMonthlyQuotaPenalty() {
         LocalDate currentMonth = LocalDate.now();
 
-        // Short Leave 1
+        // Short Leave 1 (1 hour)
         LeaveRequest req1 = LeaveRequest.builder()
                 .employeeId(testEmployee.getId())
                 .leaveType("SHORT_BREAK")
@@ -132,32 +136,20 @@ public class LeavePolicyAndCancellationTest {
                 .endTime(LocalTime.of(11, 0))
                 .reason("Bank work")
                 .build();
-        leaveService.applyForLeave(req1);
+        LeaveRequest savedReq1 = leaveService.applyForLeave(req1);
+        assertEquals(0.0, savedReq1.getTotalDays());
 
-        // Short Leave 2
-        LeaveRequest req2 = LeaveRequest.builder()
+        // Short Leave exceeding 2 hours throws exception
+        LeaveRequest reqExcess = LeaveRequest.builder()
                 .employeeId(testEmployee.getId())
-                .leaveType("EARLY_OUT")
-                .startDate(currentMonth.withDayOfMonth(5))
-                .endDate(currentMonth.withDayOfMonth(5))
-                .startTime(LocalTime.of(16, 0))
-                .endTime(LocalTime.of(17, 0))
-                .reason("Doctor visit")
-                .build();
-        leaveService.applyForLeave(req2);
-
-        // Short Leave 3 (Quota Exceeded!)
-        LeaveRequest req3 = LeaveRequest.builder()
-                .employeeId(testEmployee.getId())
-                .leaveType("SHORT_LEAVE")
+                .leaveType("SHORT_BREAK")
                 .startDate(currentMonth.withDayOfMonth(10))
                 .endDate(currentMonth.withDayOfMonth(10))
-                .startTime(LocalTime.of(11, 0))
-                .endTime(LocalTime.of(12, 0))
-                .reason("Courier receipt")
+                .startTime(LocalTime.of(10, 0))
+                .endTime(LocalTime.of(13, 0)) // 3 hours > 2 hours
+                .reason("Long errands")
                 .build();
-        LeaveRequest savedReq3 = leaveService.applyForLeave(req3);
 
-        assertTrue(savedReq3.getReason().contains("Quota Exceeded"));
+        assertThrows(IllegalStateException.class, () -> leaveService.applyForLeave(reqExcess));
     }
 }

@@ -49,19 +49,24 @@ public class QuotaValidationRule implements LeavePolicyRule {
         var specialQuota = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveType(request.getEmployeeId(), year, reqType);
         if (specialQuota.isPresent()) {
             remaining = specialQuota.get().getRemaining();
+        } else if (isDynamicQuotaType(reqType)) {
+            // Dynamic quota types require explicit HR/Admin grant in EmployeeLeaveQuota
+            remaining = 0.0;
         } else {
             LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYear(request.getEmployeeId(), year)
                     .orElseGet(() -> LeaveBalance.builder()
                             .employeeId(request.getEmployeeId())
                             .year(year)
-                            .casualLeaveQuota(12.0)
+                            .casualLeaveQuota(6.0)
                             .casualLeaveUsed(0.0)
-                            .sickLeaveQuota(12.0)
+                            .sickLeaveQuota(6.0)
                             .sickLeaveUsed(0.0)
-                            .earnedLeaveQuota(15.0)
+                            .earnedLeaveQuota(6.0)
                             .earnedLeaveUsed(0.0)
-                            .workFromHomeQuota(24.0)
+                            .workFromHomeQuota(0.0)
                             .workFromHomeUsed(0.0)
+                            .restrictedHolidayQuota(2.0)
+                            .restrictedHolidayUsed(0.0)
                             .build());
 
             String normType = reqType.replaceAll("_LEAVE$", "");
@@ -76,5 +81,13 @@ public class QuotaValidationRule implements LeavePolicyRule {
         if (requestedDays > remaining) {
             throw new IllegalStateException("Insufficient " + reqType + " leave balance. Available: " + Math.max(0.0, remaining) + " days.");
         }
+    }
+
+    private boolean isDynamicQuotaType(String type) {
+        if (type == null) return false;
+        String upper = type.toUpperCase().replaceAll("_LEAVE$", "");
+        return upper.equals("COMP_OFF") || upper.equals("COMPOFF")
+                || upper.equals("MATERNITY") || upper.equals("PATERNITY")
+                || upper.equals("BEREAVEMENT") || upper.equals("BIRTHDAY");
     }
 }

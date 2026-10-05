@@ -127,6 +127,28 @@ public class PayrollService {
         List<Payroll> list = payrollRepository.findByEmployeeIdOrderByPayPeriodDesc(employeeId);
         if (list.isEmpty()) {
             list = seedDefaultPayrollForEmployee(employeeId);
+        } else {
+            // Auto backfill missing details or corrupted fields on existing records
+            Optional<Employee> empOpt = employeeRepository.findById(employeeId);
+            for (Payroll p : list) {
+                boolean modified = false;
+                if (p.getEmployeeName() == null || p.getEmployeeName().isBlank() || p.getEmployeeCode() == null) {
+                    empOpt.ifPresent(emp -> {
+                        p.setEmployeeName(emp.getFirstName() + " " + emp.getLastName());
+                        p.setEmployeeCode(emp.getEmployeeCode());
+                        p.setDesignation(emp.getDesignation());
+                        p.setDepartment(emp.getDepartment());
+                    });
+                    modified = true;
+                }
+                if (p.getBankAccountNumber() == null || p.getBankAccountNumber().isBlank()) {
+                    p.setBankAccountNumber("•••• 9842");
+                    modified = true;
+                }
+                if (modified) {
+                    payrollRepository.save(p);
+                }
+            }
         }
         return list;
     }

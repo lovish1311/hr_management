@@ -52,8 +52,12 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of("*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"));
+        configuration.setAllowedHeaders(Arrays.asList(
+                "Authorization", "Cache-Control", "Content-Type", "Accept", "Origin",
+                "X-Requested-With", "X-Employee-Id", "x-employee-id", "*"
+        ));
+        configuration.setExposedHeaders(Arrays.asList("Authorization", "X-Employee-Id", "x-employee-id", "*"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
@@ -66,7 +70,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
-                        auth.requestMatchers("/api/auth/**").permitAll()
+                        auth.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                                .requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/ws/**", "/ws/tambola/**").permitAll()
                                 .requestMatchers("/", "/index.html", "/*.js", "/*.json", "/*.wasm", "/*.png", "/assets/**", "/icons/**", "/canvaskit/**", "/flutter.js", "/flutter_bootstrap.js", "/flutter_service_worker.js").permitAll()
                                 .requestMatchers("/api/**").authenticated()

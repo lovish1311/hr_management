@@ -128,13 +128,13 @@ public class LeaveController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
     public ResponseEntity<LeaveRequest> withdrawApprovedLeave(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
+            @RequestBody(required = false) Map<String, String> body) {
         Long actorId = null;
-        try {
-            String rawId = body.get("actorId");
-            if (rawId != null && !rawId.isBlank()) actorId = Long.parseLong(rawId);
-        } catch (NumberFormatException e) {
-            return ResponseEntity.badRequest().build();
+        if (body != null && body.containsKey("actorId")) {
+            try {
+                String rawId = body.get("actorId");
+                if (rawId != null && !rawId.isBlank()) actorId = Long.parseLong(rawId);
+            } catch (NumberFormatException ignored) {}
         }
         return ResponseEntity.ok(leaveService.withdrawApprovedLeave(id, actorId));
     }

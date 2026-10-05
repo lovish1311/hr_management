@@ -32,3 +32,17 @@ build/
 ### VS Code ###
 .vscode/
 /scratch
+
+### Environment & Secrets ###
+.env
+*.env
+.env.*
+!.env.example
+application-local.properties
+application-local.yml
+
+# Documentation and Chat Archives (Stored centrally in workspace docs/)
+/docs/
+/chats/
+/playwright_screenshots/
+test_edge_e2e_suite.py
