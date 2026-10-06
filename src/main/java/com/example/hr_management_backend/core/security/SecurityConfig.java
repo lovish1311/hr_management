@@ -75,7 +75,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth ->
                         auth.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                                 .requestMatchers("/api/auth/**").permitAll()
-                                .requestMatchers("/ws/**", "/ws/tambola/**").permitAll()
+                                .requestMatchers("/ws/**", "/ws/tambola/**", "/ws/scribbil/**", "/ws/draw-and-guess/**").permitAll()
                                 .requestMatchers("/", "/index.html", "/*.js", "/*.json", "/*.wasm", "/*.png", "/assets/**", "/icons/**", "/canvaskit/**", "/flutter.js", "/flutter_bootstrap.js", "/flutter_service_worker.js").permitAll()
                                 .requestMatchers("/api/**", "/api/v1/**").authenticated()
                                 .anyRequest().permitAll()

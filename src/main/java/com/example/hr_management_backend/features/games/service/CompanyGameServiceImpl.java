@@ -36,6 +36,24 @@ public class CompanyGameServiceImpl implements CompanyGameService {
             companyGameRepository.save(tambola);
             log.info("Initialized default game: TAMBOLA in CompanyGame registry");
         }
+
+        if (!companyGameRepository.existsById("DRAW_AND_GUESS")) {
+            CompanyGame drawGuess = CompanyGame.builder()
+                    .gameKey("DRAW_AND_GUESS")
+                    .title("Draw & Guess")
+                    .description("Real-time multiplayer drawing and guessing game. Compete with teammates, sketch words, and guess fast for high scores.")
+                    .category("Multiplayer Drawing")
+                    .iconName("brush_rounded")
+                    .gradientStart("#0D9488")
+                    .gradientEnd("#14B8A6")
+                    .isEnabled(true)
+                    .allowedRoles("ROLE_EMPLOYEE,ROLE_HR_ADMIN,ROLE_SUPER_ADMIN,ROLE_HR,ROLE_MANAGER")
+                    .minPlayers(2)
+                    .maxPlayers(20)
+                    .build();
+            companyGameRepository.save(drawGuess);
+            log.info("Initialized default game: DRAW_AND_GUESS in CompanyGame registry");
+        }
     }
 
     @Override
