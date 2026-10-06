@@ -6,6 +6,7 @@ import com.example.hr_management_backend.features.attendance.service.AttendanceS
 import com.example.hr_management_backend.features.leaves.model.LeaveRequest;
 import com.example.hr_management_backend.features.leaves.repository.LeaveRequestRepository;
 import com.example.hr_management_backend.features.leaves.service.LeaveService;
+import com.example.hr_management_backend.features.employees.model.Employee;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,10 +37,31 @@ public class LeaveAttendanceSyncTest {
     @Autowired
     private AttendanceRepository attendanceRepository;
 
+    @Autowired
+    private com.example.hr_management_backend.features.employees.repository.EmployeeRepository employeeRepository;
+
     @Test
     @DisplayName("Approving a leave should auto-sync ON_LEAVE status to Attendance and block check-in")
     void testLeaveApprovalSyncsAttendanceAndBlocksCheckIn() {
-        Long testEmployeeId = 9999L;
+        Employee hrAdmin = employeeRepository.findByEmail("hr@company.com").orElseGet(() ->
+                employeeRepository.save(Employee.builder()
+                        .email("hr@company.com")
+                        .firstName("HR")
+                        .lastName("Admin")
+                        .role("HR")
+                        .employeeCode("HR01")
+                        .build()));
+
+        Employee testEmp = employeeRepository.findByEmail("sync.test@company.com").orElseGet(() ->
+                employeeRepository.save(Employee.builder()
+                        .email("sync.test@company.com")
+                        .firstName("Sync")
+                        .lastName("Test")
+                        .role("EMPLOYEE")
+                        .employeeCode("SYNC01")
+                        .build()));
+
+        Long testEmployeeId = testEmp.getId();
         LocalDate today = LocalDate.now();
 
         // 1. Submit leave request for today
@@ -51,11 +73,11 @@ public class LeaveAttendanceSyncTest {
                 .reason("Doctor Appointment")
                 .build();
 
-        LeaveRequest submitted = leaveService.applyForLeave(request);
+        LeaveRequest submitted = leaveService.applyForLeave(request, testEmp.getEmail());
         assertThat(submitted.getStatus()).isEqualTo("PENDING");
 
-        // 2. Approve leave request
-        LeaveRequest approved = leaveService.updateStatus(submitted.getId(), "APPROVED", null, 1L);
+        // 2. Approve leave request by HR admin
+        LeaveRequest approved = leaveService.updateStatus(submitted.getId(), "APPROVED", null, hrAdmin.getId());
         assertThat(approved.getStatus()).isEqualTo("APPROVED");
 
         // Force manual trigger of attendance sync to test listener domain logic

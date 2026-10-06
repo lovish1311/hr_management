@@ -26,6 +26,10 @@ public class SalaryStructureDto {
     private BigDecimal pfContribution;
     private BigDecimal esiContribution;
     private BigDecimal professionalTax;
+    private String taxRegime;
+    private BigDecimal declared80C;
+    private BigDecimal declared80D;
+    private BigDecimal monthlyTdsOverride;
 
     private LocalDate effectiveDate;
     private Boolean isActive;

@@ -314,14 +314,14 @@ public class TambolaGameServiceImpl implements TambolaGameService {
         TambolaGame game = gameRepository.findByRoomCodeWithLock(normalizedCode)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Game not found"));
 
-        if (!"RUNNING".equalsIgnoreCase(game.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot claim prizes. Game is not running.");
-        }
-
         // Step 1: Check if already claimed (concurrency collision protection)
         if (winnerRepository.existsByGameIdAndPrizeType(game.getId(), normalizedPrize)) {
             log.warn("Prize {} in game {} was already claimed", normalizedPrize, normalizedCode);
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Prize " + normalizedPrize + " has already been claimed by another player!");
+        }
+
+        if (!"RUNNING".equalsIgnoreCase(game.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot claim prizes. Game is not running.");
         }
 
         // Step 2: Validate claimant's ticket

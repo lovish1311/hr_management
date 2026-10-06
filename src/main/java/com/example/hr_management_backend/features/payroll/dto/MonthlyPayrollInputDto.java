@@ -22,6 +22,11 @@ public class MonthlyPayrollInputDto {
     private Double overtimeHours;
     private BigDecimal adHocBonus;
     private BigDecimal adHocDeduction;
+    private BigDecimal arrearsAmount;
+    private String taxRegime;
+    private BigDecimal declared80C;
+    private BigDecimal declared80D;
     private Boolean isLocked;
+    private Boolean isExempt;
     private String notes;
 }

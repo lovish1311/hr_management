@@ -79,6 +79,10 @@ public class PayrollRecord {
     @Builder.Default
     private BigDecimal adHocBonus = BigDecimal.ZERO;
 
+    @Column(nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal arrearsAmount = BigDecimal.ZERO;
+
     // Deductions breakdown
     @Column(nullable = false, precision = 12, scale = 2)
     @Builder.Default
@@ -99,6 +103,14 @@ public class PayrollRecord {
     @Column(nullable = false, precision = 12, scale = 2)
     @Builder.Default
     private BigDecimal adHocDeduction = BigDecimal.ZERO;
+
+    @Column(nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal calculatedTds = BigDecimal.ZERO;
+
+    @Column(length = 20)
+    @Builder.Default
+    private String taxRegime = "NEW";
 
     // Financial totals
     @Column(nullable = false, precision = 12, scale = 2)

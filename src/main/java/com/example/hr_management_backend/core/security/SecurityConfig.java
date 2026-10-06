@@ -69,12 +69,15 @@ public class SecurityConfig {
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(new org.springframework.security.web.authentication.HttpStatusEntryPoint(org.springframework.http.HttpStatus.UNAUTHORIZED))
+                )
                 .authorizeHttpRequests(auth ->
                         auth.requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                                 .requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/ws/**", "/ws/tambola/**").permitAll()
                                 .requestMatchers("/", "/index.html", "/*.js", "/*.json", "/*.wasm", "/*.png", "/assets/**", "/icons/**", "/canvaskit/**", "/flutter.js", "/flutter_bootstrap.js", "/flutter_service_worker.js").permitAll()
-                                .requestMatchers("/api/**").authenticated()
+                                .requestMatchers("/api/**", "/api/v1/**").authenticated()
                                 .anyRequest().permitAll()
                 );
 

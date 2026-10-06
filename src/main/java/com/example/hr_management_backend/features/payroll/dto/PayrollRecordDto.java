@@ -36,12 +36,15 @@ public class PayrollRecordDto {
     private BigDecimal calculatedSpecial;
     private BigDecimal overtimeAmount;
     private BigDecimal adHocBonus;
+    private BigDecimal arrearsAmount;
 
     private BigDecimal calculatedPf;
     private BigDecimal calculatedEsi;
     private BigDecimal calculatedPt;
     private BigDecimal lopDeductionAmount;
     private BigDecimal adHocDeduction;
+    private BigDecimal calculatedTds;
+    private String taxRegime;
 
     private BigDecimal totalGrossPay;
     private BigDecimal totalDeductions;

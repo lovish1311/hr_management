@@ -24,6 +24,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
+    private final com.example.hr_management_backend.features.employees.repository.EmployeeAuthorityRepository employeeAuthorityRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
 
@@ -42,13 +43,24 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByEmail(loginRequest.getEmail())
                 .orElseThrow(() -> new RuntimeException("User not found: " + loginRequest.getEmail()));
 
+        Long empId = user.getEmployeeId();
+        if (empId == null) {
+            empId = employeeRepository.findByEmail(user.getEmail()).map(com.example.hr_management_backend.features.employees.model.Employee::getId).orElse(null);
+        }
+
+        java.util.List<String> authorities = java.util.Collections.emptyList();
+        if (empId != null) {
+            authorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(empId);
+        }
+
         return LoginResponse.builder()
                 .token(jwt)
                 .type("Bearer")
                 .id(user.getId())
                 .email(user.getEmail())
                 .role(user.getRole())
-                .employeeId(user.getEmployeeId())
+                .employeeId(empId)
+                .authorities(authorities)
                 .build();
     }
 

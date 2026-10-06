@@ -84,6 +84,18 @@ public class EmployeeController {
         ));
     }
 
+    @PutMapping("/{id}/elevate")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<EmployeeDetailDto> elevateRoleAndPermissions(
+            @PathVariable Long id,
+            @Valid @RequestBody com.example.hr_management_backend.features.employees.dto.ElevateEmployeeDto dto,
+            org.springframework.security.core.Authentication authentication) {
+        String actorEmail = (authentication != null && authentication.getName() != null)
+                ? authentication.getName()
+                : "admin@company.com";
+        return ResponseEntity.ok(employeeService.elevateRoleAndPermissions(id, dto, actorEmail));
+    }
+
     private final StarredPeerRepository starredPeerRepository;
 
     @GetMapping("/starred")

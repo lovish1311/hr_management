@@ -25,6 +25,12 @@ import com.example.hr_management_backend.features.leaves.repository.LeaveBalance
 import java.time.LocalDate;
 import java.util.Optional;
 
+import com.example.hr_management_backend.features.auth.repository.UserRepository;
+import com.example.hr_management_backend.features.employees.dto.ElevateEmployeeDto;
+import com.example.hr_management_backend.features.employees.model.EmployeeAuthority;
+import com.example.hr_management_backend.features.employees.repository.EmployeeAuthorityRepository;
+import java.time.LocalDateTime;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -34,6 +40,8 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final AttendanceRepository attendanceRepository;
     private final LeaveRequestRepository leaveRequestRepository;
     private final LeaveBalanceRepository leaveBalanceRepository;
+    private final EmployeeAuthorityRepository employeeAuthorityRepository;
+    private final UserRepository userRepository;
 
     @Override
     @Transactional
@@ -189,6 +197,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Transactional
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public void deleteEmployee(Long id) {
+        employeeAuthorityRepository.deleteByEmployeeId(id);
         employeeRepository.deleteById(id);
     }
 
@@ -250,6 +259,46 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .build();
     }
 
+    @Override
+    @Transactional
+    @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
+    public EmployeeDetailDto elevateRoleAndPermissions(Long employeeId, ElevateEmployeeDto dto, String actorEmail) {
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
+
+        if (dto.getRole() != null && !dto.getRole().isBlank()) {
+            String newRole = dto.getRole().trim().toUpperCase().replace("ROLE_", "");
+            employee.setRole(newRole);
+            employeeRepository.save(employee);
+
+            // Synchronize corresponding User entity if it exists
+            userRepository.findByEmail(employee.getEmail()).ifPresent(user -> {
+                user.setRole("ROLE_" + newRole);
+                userRepository.save(user);
+            });
+        }
+
+        // Atomically synchronize granular permissions in employee_authorities
+        employeeAuthorityRepository.deleteByEmployeeId(employeeId);
+        if (dto.getAuthorities() != null && !dto.getAuthorities().isEmpty()) {
+            List<EmployeeAuthority> authoritiesToSave = dto.getAuthorities().stream()
+                    .filter(auth -> auth != null && !auth.isBlank())
+                    .map(auth -> EmployeeAuthority.builder()
+                            .employeeId(employeeId)
+                            .authority(auth.trim().toUpperCase())
+                            .grantedBy(actorEmail)
+                            .grantedAt(LocalDateTime.now())
+                            .build())
+                    .toList();
+            employeeAuthorityRepository.saveAll(authoritiesToSave);
+        }
+
+        log.info("Elevated role and authorities for employeeId={} (email={}) by actor={}. New role={}, authorities={}",
+                employeeId, employee.getEmail(), actorEmail, employee.getRole(), dto.getAuthorities());
+
+        return mapToDetailDto(employee);
+    }
+
     private EmployeeDetailDto mapToDetailDto(Employee employee) {
         String managerName = null;
         Long managerId = null;
@@ -257,6 +306,8 @@ public class EmployeeServiceImpl implements EmployeeService {
             managerId = employee.getManager().getId();
             managerName = employee.getManager().getFirstName() + " " + employee.getManager().getLastName();
         }
+
+        List<String> authorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(employee.getId());
 
         return EmployeeDetailDto.builder()
                 .id(employee.getId())
@@ -286,6 +337,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .todayAttendanceStatus(computeTodayStatus(employee))
                 .leaveBalance(computeLeaveBalance(employee.getId()))
                 .hasTambolaAccess(Boolean.TRUE.equals(employee.getHasTambolaAccess()))
+                .authorities(authorities)
                 .build();
     }
 }

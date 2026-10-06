@@ -17,6 +17,8 @@ public class LoginResponse {
     private String email;
     private String role;
     private Long employeeId;
+    @Builder.Default
+    private java.util.List<String> authorities = new java.util.ArrayList<>();
 
     public LoginResponse(String token, String email, String role) {
         this.token = token;

@@ -9,6 +9,12 @@ import com.example.hr_management_backend.features.leaves.repository.LeaveRequest
 import com.example.hr_management_backend.features.payroll.dto.*;
 import com.example.hr_management_backend.features.payroll.model.*;
 import com.example.hr_management_backend.features.payroll.repository.*;
+import com.example.hr_management_backend.features.holidays.model.Holiday;
+import com.example.hr_management_backend.features.holidays.repository.HolidayRepository;
+import com.example.hr_management_backend.features.payroll.arrears.ArrearsService;
+import com.example.hr_management_backend.features.payroll.tax.TaxCalculatorFactory;
+import com.example.hr_management_backend.features.payroll.tax.TaxDeclarationDto;
+import com.example.hr_management_backend.features.payroll.tax.TaxRegime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -16,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Month;
@@ -34,6 +41,9 @@ public class PayrollProcessingService {
     private final EmployeeRepository employeeRepository;
     private final AttendanceRepository attendanceRepository;
     private final LeaveRequestRepository leaveRequestRepository;
+    private final HolidayRepository holidayRepository;
+    private final TaxCalculatorFactory taxCalculatorFactory;
+    private final ArrearsService arrearsService;
 
     // =========================================================================
     // 1. SALARY STRUCTURE (MASTER CONFIG)
@@ -78,11 +88,20 @@ public class PayrollProcessingService {
         entity.setPfContribution(dto.getPfContribution() != null ? dto.getPfContribution() : BigDecimal.ZERO);
         entity.setEsiContribution(dto.getEsiContribution() != null ? dto.getEsiContribution() : BigDecimal.ZERO);
         entity.setProfessionalTax(dto.getProfessionalTax() != null ? dto.getProfessionalTax() : BigDecimal.valueOf(200));
+        entity.setTaxRegime(dto.getTaxRegime() != null ? dto.getTaxRegime().toUpperCase() : "NEW");
+        entity.setDeclared80C(dto.getDeclared80C());
+        entity.setDeclared80D(dto.getDeclared80D());
+        entity.setMonthlyTdsOverride(dto.getMonthlyTdsOverride());
 
         entity.setEffectiveDate(dto.getEffectiveDate() != null ? dto.getEffectiveDate() : LocalDate.now());
         entity.setIsActive(dto.getIsActive() != null ? dto.getIsActive() : true);
 
         SalaryStructure saved = salaryStructureRepository.save(entity);
+        try {
+            arrearsService.autoDetectAndQueueStructuralArrears(employee.getId(), LocalDate.now().getMonth().name(), LocalDate.now().getYear());
+        } catch (Exception e) {
+            log.warn("Arrears auto-detection notice for employee {}: {}", employee.getId(), e.getMessage());
+        }
         return mapToSalaryStructureDto(saved, employee);
     }
 
@@ -130,6 +149,8 @@ public class PayrollProcessingService {
     public MonthlyPayrollInputDto saveMonthlyPayrollInput(MonthlyPayrollInputDto dto) {
         String month = normalizeMonth(dto.getPayrollMonth());
         Integer year = dto.getPayrollYear() != null ? dto.getPayrollYear() : LocalDate.now().getYear();
+        validatePayPeriodNotFuture(month, year);
+        validatePayPeriodNotPublished(month, year);
 
         MonthlyPayrollInput input = monthlyPayrollInputRepository
                 .findByEmployeeIdAndPayrollMonthIgnoreCaseAndPayrollYear(dto.getEmployeeId(), month, year)
@@ -147,6 +168,11 @@ public class PayrollProcessingService {
         input.setOvertimeHours(dto.getOvertimeHours() != null ? Math.max(0.0, dto.getOvertimeHours()) : 0.0);
         input.setAdHocBonus(dto.getAdHocBonus() != null ? dto.getAdHocBonus() : BigDecimal.ZERO);
         input.setAdHocDeduction(dto.getAdHocDeduction() != null ? dto.getAdHocDeduction() : BigDecimal.ZERO);
+        input.setArrearsAmount(dto.getArrearsAmount() != null ? dto.getArrearsAmount() : BigDecimal.ZERO);
+        input.setTaxRegime(dto.getTaxRegime() != null ? dto.getTaxRegime().toUpperCase() : "NEW");
+        input.setDeclared80C(dto.getDeclared80C());
+        input.setDeclared80D(dto.getDeclared80D());
+        input.setIsExempt(Boolean.TRUE.equals(dto.getIsExempt()));
         input.setNotes(dto.getNotes());
 
         MonthlyPayrollInput saved = monthlyPayrollInputRepository.save(input);
@@ -186,6 +212,7 @@ public class PayrollProcessingService {
                         .adHocBonus(BigDecimal.ZERO)
                         .adHocDeduction(BigDecimal.ZERO)
                         .isLocked(false)
+                        .isExempt(Boolean.TRUE.equals(emp.getIsPayrollExempt()))
                         .build());
             }
         }
@@ -194,7 +221,10 @@ public class PayrollProcessingService {
 
     @Transactional
     public List<MonthlyPayrollInputDto> syncMonthlyPayrollInputsFromAttendance(String monthStr, Integer year) {
+        validatePayPeriodNotFuture(monthStr, year);
         String month = normalizeMonth(monthStr);
+        validatePayPeriodNotPublished(month, year);
+
         int monthNum = parseMonthNumber(month);
         YearMonth ym = YearMonth.of(year, monthNum);
         LocalDate start = ym.atDay(1);
@@ -202,6 +232,11 @@ public class PayrollProcessingService {
 
         List<Employee> employees = employeeRepository.findAll();
         List<MonthlyPayrollInputDto> updated = new ArrayList<>();
+
+        // Fetch company general holidays once for the cycle
+        Set<LocalDate> holidayDates = holidayRepository.findActiveGeneralHolidaysBetween(start, end).stream()
+                .map(Holiday::getDate)
+                .collect(Collectors.toSet());
 
         for (Employee emp : employees) {
             MonthlyPayrollInput input = monthlyPayrollInputRepository
@@ -211,46 +246,106 @@ public class PayrollProcessingService {
                             .payrollMonth(month)
                             .payrollYear(year)
                             .isLocked(false)
+                            .isExempt(Boolean.TRUE.equals(emp.getIsPayrollExempt()))
                             .build());
 
             if (Boolean.TRUE.equals(input.getIsLocked())) {
                 continue; // Do not overwrite if HR previously locked this month
             }
 
-            // Count approved LOP / Loss of Pay leaves
-            double approvedLopDays = 0.0;
+            // Exemption check 1: If employee attendance tracking is disabled, 0 LOP
+            if (Boolean.FALSE.equals(emp.getIsAttendanceTracked())) {
+                input.setLopDays(0.0);
+                input.setNotes("Employee attendance tracking is EXEMPT");
+                BigDecimal pendingArrears = arrearsService.calculatePendingArrearsTotalForEmployee(emp.getId(), month, year);
+                input.setArrearsAmount(pendingArrears != null ? pendingArrears : BigDecimal.ZERO);
+                MonthlyPayrollInput saved = monthlyPayrollInputRepository.save(input);
+                updated.add(mapToMonthlyPayrollInputDto(saved, emp));
+                continue;
+            }
+
+            // Evaluation bounds: up to today if in current month, or end of month if in past
+            LocalDate today = LocalDate.now();
+            LocalDate evalEnd = end.isAfter(today) ? today : end;
+            LocalDate evalStart = (emp.getJoiningDate() != null && emp.getJoiningDate().isAfter(start))
+                    ? emp.getJoiningDate()
+                    : start;
+
             List<LeaveRequest> leaves = leaveRequestRepository.findApprovedLeavesForEmployeeInRange(emp.getId(), start, end);
-            for (LeaveRequest lr : leaves) {
-                if ("LOP".equalsIgnoreCase(lr.getLeaveType()) || "UNPAID".equalsIgnoreCase(lr.getLeaveType())) {
-                    approvedLopDays += lr.getTotalDays() != null ? lr.getTotalDays() : 1.0;
+            List<Attendance> attendances = attendanceRepository.findByEmployeeIdAndDateBetween(emp.getId(), start, end);
+            Map<LocalDate, Attendance> attendanceMap = attendances.stream()
+                    .collect(Collectors.toMap(Attendance::getDate, a -> a, (a1, a2) -> a1));
+
+            double totalLopDays = 0.0;
+            int missingSheetDays = 0;
+
+            if (!evalStart.isAfter(evalEnd)) {
+                for (LocalDate date = evalStart; !date.isAfter(evalEnd); date = date.plusDays(1)) {
+                    // 1. Skip Sundays and published public holidays
+                    if (date.getDayOfWeek() == DayOfWeek.SUNDAY || holidayDates.contains(date)) {
+                        continue;
+                    }
+
+                    // 2. Check approved leave requests
+                    LocalDate d = date;
+                    Optional<LeaveRequest> matchedLeave = leaves.stream()
+                            .filter(l -> !d.isBefore(l.getStartDate()) && !d.isAfter(l.getEndDate()))
+                            .findFirst();
+
+                    if (matchedLeave.isPresent()) {
+                        String type = matchedLeave.get().getLeaveType();
+                        if ("LOP".equalsIgnoreCase(type) || "UNPAID".equalsIgnoreCase(type)) {
+                            totalLopDays += 1.0;
+                        }
+                        continue;
+                    }
+
+                    // 3. Check recorded attendance log
+                    Attendance att = attendanceMap.get(date);
+                    if (att != null) {
+                        String status = att.getStatus() != null ? att.getStatus().toUpperCase() : "";
+                        if ("LOP_LEAVE".equals(status) || "UNEXCUSED_ABSENT".equals(status) || "ABSENT".equals(status)) {
+                            totalLopDays += 1.0;
+                        } else if ("HALF_DAY".equals(status)) {
+                            totalLopDays += 0.5;
+                        }
+                    } else {
+                        // 4. BIOMETRIC GAP / MISSING SHEET POLICY:
+                        // No biometric sheet or punch exists for this working day!
+                        totalLopDays += 1.0;
+                        missingSheetDays++;
+                    }
                 }
             }
 
-            // Also inspect daily attendance for UNEXCUSED_ABSENT or LOP_LEAVE
-            List<Attendance> attendances = attendanceRepository.findByEmployeeIdAndDateBetween(emp.getId(), start, end);
-            long attendanceLopCount = attendances.stream()
-                    .filter(a -> "LOP_LEAVE".equalsIgnoreCase(a.getStatus()) || "UNEXCUSED_ABSENT".equalsIgnoreCase(a.getStatus()))
-                    .count();
-
-            double calculatedLop = Math.max(approvedLopDays, (double) attendanceLopCount);
-            input.setLopDays(calculatedLop);
-
+            input.setLopDays(totalLopDays);
             if (input.getOvertimeHours() == null) input.setOvertimeHours(0.0);
             if (input.getAdHocBonus() == null) input.setAdHocBonus(BigDecimal.ZERO);
             if (input.getAdHocDeduction() == null) input.setAdHocDeduction(BigDecimal.ZERO);
-            input.setNotes("Auto-synced from attendance logs on " + LocalDate.now());
+
+            BigDecimal pendingArrears = arrearsService.calculatePendingArrearsTotalForEmployee(emp.getId(), month, year);
+            input.setArrearsAmount(pendingArrears != null ? pendingArrears : BigDecimal.ZERO);
+
+            if (missingSheetDays > 0) {
+                input.setNotes("Synced: " + totalLopDays + " LOP days (including " + missingSheetDays + " missing biometric sheet days)");
+            } else {
+                input.setNotes("Auto-synced from attendance logs on " + today);
+            }
 
             MonthlyPayrollInput saved = monthlyPayrollInputRepository.save(input);
             updated.add(mapToMonthlyPayrollInputDto(saved, emp));
         }
 
-        log.info("Synced attendance and leave inputs for {} {} across {} employees.", month, year, updated.size());
+        log.info("Synced attendance with biometric gap policy for {} {} across {} employees.", month, year, updated.size());
         return updated;
     }
 
     @Transactional
     public void setLockStateForMonth(String monthStr, Integer year, boolean lock) {
+        validatePayPeriodNotFuture(monthStr, year);
         String month = normalizeMonth(monthStr);
+        validatePayPeriodNotPublished(month, year);
+
         List<MonthlyPayrollInput> inputs = monthlyPayrollInputRepository.findByPayrollMonthIgnoreCaseAndPayrollYear(month, year);
         for (MonthlyPayrollInput i : inputs) {
             i.setIsLocked(lock);
@@ -265,7 +360,10 @@ public class PayrollProcessingService {
 
     @Transactional
     public List<PayrollRecordDto> processBatchPayroll(String monthStr, Integer year) {
+        validatePayPeriodNotFuture(monthStr, year);
         String month = normalizeMonth(monthStr);
+        validatePayPeriodNotPublished(month, year);
+
         int monthNum = parseMonthNumber(month);
         YearMonth ym = YearMonth.of(year, monthNum);
         int daysInMonth = ym.lengthOfMonth();
@@ -274,9 +372,6 @@ public class PayrollProcessingService {
         List<PayrollRecordDto> calculated = new ArrayList<>();
 
         for (Employee emp : employees) {
-            SalaryStructure structure = salaryStructureRepository.findByEmployeeIdAndIsActiveTrue(emp.getId())
-                    .orElseGet(() -> createDefaultStructureEntity(emp));
-
             MonthlyPayrollInput input = monthlyPayrollInputRepository
                     .findByEmployeeIdAndPayrollMonthIgnoreCaseAndPayrollYear(emp.getId(), month, year)
                     .orElseGet(() -> MonthlyPayrollInput.builder()
@@ -288,7 +383,55 @@ public class PayrollProcessingService {
                             .adHocBonus(BigDecimal.ZERO)
                             .adHocDeduction(BigDecimal.ZERO)
                             .isLocked(false)
+                            .isExempt(Boolean.TRUE.equals(emp.getIsPayrollExempt()))
                             .build());
+
+            // Payroll Exemption handling: exempt records have zero payout and do not export to bank files
+            if (Boolean.TRUE.equals(input.getIsExempt()) || Boolean.TRUE.equals(emp.getIsPayrollExempt())) {
+                PayrollRecord exemptRecord = payrollRecordRepository
+                        .findByEmployeeIdAndPayrollMonthIgnoreCaseAndPayrollYear(emp.getId(), month, year)
+                        .orElseGet(PayrollRecord::new);
+
+                exemptRecord.setEmployeeId(emp.getId());
+                exemptRecord.setEmployeeName(emp.getFirstName() + " " + emp.getLastName());
+                exemptRecord.setEmployeeCode(emp.getEmployeeCode());
+                exemptRecord.setDesignation(emp.getDesignation());
+                exemptRecord.setDepartment(emp.getDepartment());
+                exemptRecord.setBankAccountNumber(emp.getEmployeeCode() != null ? "EXEMPT" : "");
+                exemptRecord.setPayrollMonth(month);
+                exemptRecord.setPayrollYear(year);
+                exemptRecord.setTotalDaysInMonth(daysInMonth);
+                exemptRecord.setPaidDays(0.0);
+                exemptRecord.setLopDays(0.0);
+                exemptRecord.setOvertimeHours(0.0);
+                exemptRecord.setMasterFixedGross(BigDecimal.ZERO);
+                exemptRecord.setCalculatedBasic(BigDecimal.ZERO);
+                exemptRecord.setCalculatedHra(BigDecimal.ZERO);
+                exemptRecord.setCalculatedConveyance(BigDecimal.ZERO);
+                exemptRecord.setCalculatedMedical(BigDecimal.ZERO);
+                exemptRecord.setCalculatedSpecial(BigDecimal.ZERO);
+                exemptRecord.setOvertimeAmount(BigDecimal.ZERO);
+                exemptRecord.setAdHocBonus(BigDecimal.ZERO);
+                exemptRecord.setArrearsAmount(BigDecimal.ZERO);
+                exemptRecord.setCalculatedPf(BigDecimal.ZERO);
+                exemptRecord.setCalculatedEsi(BigDecimal.ZERO);
+                exemptRecord.setCalculatedPt(BigDecimal.ZERO);
+                exemptRecord.setLopDeductionAmount(BigDecimal.ZERO);
+                exemptRecord.setAdHocDeduction(BigDecimal.ZERO);
+                exemptRecord.setCalculatedTds(BigDecimal.ZERO);
+                exemptRecord.setTotalGrossPay(BigDecimal.ZERO);
+                exemptRecord.setTotalDeductions(BigDecimal.ZERO);
+                exemptRecord.setNetPay(BigDecimal.ZERO);
+                exemptRecord.setStatus(PayrollStatus.EXEMPT);
+                exemptRecord.setProcessedAt(LocalDateTime.now());
+
+                PayrollRecord saved = payrollRecordRepository.save(exemptRecord);
+                calculated.add(mapToPayrollRecordDto(saved));
+                continue;
+            }
+
+            SalaryStructure structure = salaryStructureRepository.findByEmployeeIdAndIsActiveTrue(emp.getId())
+                    .orElseGet(() -> createDefaultStructureEntity(emp));
 
             PayrollRecord record = calculatePayrollRecord(emp, structure, input, daysInMonth, month, year);
             record.setStatus(PayrollStatus.DRAFT);
@@ -301,6 +444,7 @@ public class PayrollProcessingService {
         log.info("Batch payroll calculated for {} {} across {} employees.", month, year, calculated.size());
         return calculated;
     }
+
 
     @Transactional
     public void verifyBatchPayroll(String monthStr, Integer year) {
@@ -324,6 +468,7 @@ public class PayrollProcessingService {
 
     @Transactional
     public void publishBatchPayroll(String monthStr, Integer year) {
+        validatePayPeriodNotFuture(monthStr, year);
         String month = normalizeMonth(monthStr);
         List<PayrollRecord> records = payrollRecordRepository.findByPayrollMonthIgnoreCaseAndPayrollYear(month, year);
         if (records.isEmpty()) {
@@ -335,6 +480,7 @@ public class PayrollProcessingService {
             r.setStatus(PayrollStatus.PUBLISHED);
             r.setPublishedAt(now);
             payrollRecordRepository.save(r);
+            arrearsService.markArrearsAsProcessed(r.getEmployeeId(), month, year, r.getId());
         }
         log.info("Batch payroll for {} {} PUBLISHED to all employees.", month, year);
     }
@@ -403,6 +549,9 @@ public class PayrollProcessingService {
             if (r.getAdHocBonus() != null && r.getAdHocBonus().compareTo(BigDecimal.valueOf(10000)) > 0) {
                 anomalies.add(r.getEmployeeName() + " has large ad-hoc bonus: ₹" + r.getAdHocBonus());
             }
+            if (r.getTotalDeductions() != null && r.getTotalGrossPay() != null && r.getTotalDeductions().compareTo(r.getTotalGrossPay()) > 0) {
+                anomalies.add(r.getEmployeeName() + " (" + r.getEmployeeCode() + ") deductions (₹" + r.getTotalDeductions() + ") exceed gross pay (₹" + r.getTotalGrossPay() + "). Net payout clamped at ₹0.");
+            }
         }
 
         // Compare against prior month
@@ -447,8 +596,19 @@ public class PayrollProcessingService {
 
     private PayrollRecord calculatePayrollRecord(Employee emp, SalaryStructure struct, MonthlyPayrollInput input,
                                                  int daysInMonth, String month, Integer year) {
+        int monthNum = parseMonthNumber(month);
+        int preJoiningDays = 0;
+        if (emp.getJoiningDate() != null) {
+            if (emp.getJoiningDate().getYear() == year && emp.getJoiningDate().getMonthValue() == monthNum) {
+                preJoiningDays = Math.max(0, emp.getJoiningDate().getDayOfMonth() - 1);
+            } else if (emp.getJoiningDate().isAfter(YearMonth.of(year, monthNum).atEndOfMonth())) {
+                preJoiningDays = daysInMonth;
+            }
+        }
+
         double lopDays = input.getLopDays() != null ? Math.min(daysInMonth, Math.max(0.0, input.getLopDays())) : 0.0;
-        double paidDays = Math.max(0.0, daysInMonth - lopDays);
+        double nonWorkingDays = Math.min(daysInMonth, preJoiningDays + lopDays);
+        double paidDays = Math.max(0.0, daysInMonth - nonWorkingDays);
         double otHours = input.getOvertimeHours() != null ? Math.max(0.0, input.getOvertimeHours()) : 0.0;
         BigDecimal adHocBonus = input.getAdHocBonus() != null ? input.getAdHocBonus() : BigDecimal.ZERO;
         BigDecimal adHocDeduction = input.getAdHocDeduction() != null ? input.getAdHocDeduction() : BigDecimal.ZERO;
@@ -461,8 +621,8 @@ public class PayrollProcessingService {
         // 2. LOP Amount = Per-Day Gross * lopDays (scale 2)
         BigDecimal lopAmount = perDayGross.multiply(BigDecimal.valueOf(lopDays)).setScale(2, RoundingMode.HALF_UP);
 
-        // 3. Earned Fixed Gross = Total Fixed Gross - LOP Amount
-        BigDecimal earnedFixedGross = totalFixedGross.subtract(lopAmount).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        // 3. Earned Fixed Gross = Per-Day Gross * paidDays
+        BigDecimal earnedFixedGross = perDayGross.multiply(BigDecimal.valueOf(paidDays)).min(totalFixedGross).setScale(2, RoundingMode.HALF_UP);
 
         // Pro-rata ratio for component breakdown with full precision
         BigDecimal proRataFactor = daysInMonth > 0 && paidDays > 0
@@ -482,18 +642,36 @@ public class PayrollProcessingService {
         BigDecimal otRate = hourlyRate.multiply(BigDecimal.valueOf(1.5));
         BigDecimal otAmount = otRate.multiply(BigDecimal.valueOf(otHours)).setScale(2, RoundingMode.HALF_UP);
 
-        // 5. Total Gross Pay = Earned Fixed Gross + Overtime + Ad-Hoc Bonus
-        BigDecimal totalGross = earnedFixedGross.add(otAmount).add(adHocBonus).setScale(2, RoundingMode.HALF_UP);
+        // 5. Arrears & Total Gross Pay = Earned Fixed Gross + Overtime + Ad-Hoc Bonus + Arrears
+        BigDecimal arrears = input.getArrearsAmount() != null ? input.getArrearsAmount() : BigDecimal.ZERO;
+        BigDecimal totalGross = earnedFixedGross.add(otAmount).add(adHocBonus).add(arrears).setScale(2, RoundingMode.HALF_UP);
 
         // 6. Statutory Deductions
         BigDecimal calcPf = struct.getPfContribution().setScale(2, RoundingMode.HALF_UP);
         BigDecimal calcEsi = struct.getEsiContribution().setScale(2, RoundingMode.HALF_UP);
         BigDecimal calcPt = struct.getProfessionalTax().setScale(2, RoundingMode.HALF_UP);
 
-        // 7. Total Deductions = Statutory + Ad-Hoc Deduction
-        BigDecimal totalDeductions = calcPf.add(calcEsi).add(calcPt).add(adHocDeduction).setScale(2, RoundingMode.HALF_UP);
+        // 7. Income Tax (TDS) Calculation via Strategy Pattern
+        TaxRegime regime = TaxRegime.NEW;
+        if (input.getTaxRegime() != null && !input.getTaxRegime().isBlank()) {
+            try { regime = TaxRegime.valueOf(input.getTaxRegime().toUpperCase()); } catch (Exception ignored) {}
+        } else if (struct.getTaxRegime() != null && !struct.getTaxRegime().isBlank()) {
+            try { regime = TaxRegime.valueOf(struct.getTaxRegime().toUpperCase()); } catch (Exception ignored) {}
+        }
 
-        // 8. Net Take-Home Pay
+        TaxDeclarationDto declaration = TaxDeclarationDto.builder()
+                .regime(regime)
+                .section80C(input.getDeclared80C() != null ? input.getDeclared80C() : struct.getDeclared80C())
+                .section80D(input.getDeclared80D() != null ? input.getDeclared80D() : struct.getDeclared80D())
+                .monthlyTdsOverride(struct.getMonthlyTdsOverride())
+                .build();
+
+        BigDecimal calcTds = taxCalculatorFactory.getStrategy(regime).calculateMonthlyTds(totalGross, declaration);
+
+        // 8. Total Deductions = Statutory + Ad-Hoc Deduction + TDS
+        BigDecimal totalDeductions = calcPf.add(calcEsi).add(calcPt).add(adHocDeduction).add(calcTds).setScale(2, RoundingMode.HALF_UP);
+
+        // 9. Net Take-Home Pay
         BigDecimal netPay = totalGross.subtract(totalDeductions).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
 
         // Find existing record to preserve ID or create new
@@ -534,6 +712,9 @@ public class PayrollProcessingService {
         record.setTotalGrossPay(totalGross);
         record.setTotalDeductions(totalDeductions);
         record.setNetPay(netPay);
+        record.setArrearsAmount(arrears);
+        record.setCalculatedTds(calcTds);
+        record.setTaxRegime(regime.name());
 
         return record;
     }
@@ -558,6 +739,10 @@ public class PayrollProcessingService {
                 .pfContribution(s.getPfContribution())
                 .esiContribution(s.getEsiContribution())
                 .professionalTax(s.getProfessionalTax())
+                .taxRegime(s.getTaxRegime())
+                .declared80C(s.getDeclared80C())
+                .declared80D(s.getDeclared80D())
+                .monthlyTdsOverride(s.getMonthlyTdsOverride())
                 .effectiveDate(s.getEffectiveDate())
                 .isActive(s.getIsActive())
                 .totalFixedGross(s.getTotalFixedGross())
@@ -584,7 +769,12 @@ public class PayrollProcessingService {
                 .overtimeHours(i.getOvertimeHours())
                 .adHocBonus(i.getAdHocBonus())
                 .adHocDeduction(i.getAdHocDeduction())
+                .arrearsAmount(i.getArrearsAmount())
+                .taxRegime(i.getTaxRegime())
+                .declared80C(i.getDeclared80C())
+                .declared80D(i.getDeclared80D())
                 .isLocked(i.getIsLocked())
+                .isExempt(Boolean.TRUE.equals(i.getIsExempt()))
                 .notes(i.getNotes())
                 .build();
     }
@@ -612,11 +802,14 @@ public class PayrollProcessingService {
                 .calculatedSpecial(r.getCalculatedSpecial())
                 .overtimeAmount(r.getOvertimeAmount())
                 .adHocBonus(r.getAdHocBonus())
+                .arrearsAmount(r.getArrearsAmount())
                 .calculatedPf(r.getCalculatedPf())
                 .calculatedEsi(r.getCalculatedEsi())
                 .calculatedPt(r.getCalculatedPt())
                 .lopDeductionAmount(r.getLopDeductionAmount())
                 .adHocDeduction(r.getAdHocDeduction())
+                .calculatedTds(r.getCalculatedTds())
+                .taxRegime(r.getTaxRegime())
                 .totalGrossPay(r.getTotalGrossPay())
                 .totalDeductions(r.getTotalDeductions())
                 .netPay(r.getNetPay())
@@ -718,6 +911,29 @@ public class PayrollProcessingService {
             return Month.valueOf(monthStr.toUpperCase()).getValue();
         } catch (Exception e) {
             return LocalDate.now().getMonthValue();
+        }
+    }
+
+    public void validatePayPeriodNotFuture(String monthStr, Integer year) {
+        String month = normalizeMonth(monthStr);
+        int monthNum = parseMonthNumber(month);
+        int targetYear = (year != null && year > 0) ? year : LocalDate.now().getYear();
+        YearMonth requestedYm = YearMonth.of(targetYear, monthNum);
+        YearMonth currentYm = YearMonth.now();
+        if (requestedYm.isAfter(currentYm)) {
+            throw new IllegalArgumentException("Cannot process or modify payroll for future period: " + month + " " + targetYear + ". Current active period is " + currentYm.getMonth().name() + " " + currentYm.getYear() + ".");
+        }
+    }
+
+    public void validatePayPeriodNotPublished(String monthStr, Integer year) {
+        String month = normalizeMonth(monthStr);
+        int targetYear = (year != null && year > 0) ? year : LocalDate.now().getYear();
+        boolean isPublished = payrollRecordRepository
+                .findByPayrollMonthIgnoreCaseAndPayrollYear(month, targetYear)
+                .stream()
+                .anyMatch(r -> r.getStatus() == PayrollStatus.PUBLISHED);
+        if (isPublished) {
+            throw new IllegalStateException("Pay cycle for " + month + " " + targetYear + " is PUBLISHED and permanently frozen for compliance. Modifications or recalculations are prohibited.");
         }
     }
 }

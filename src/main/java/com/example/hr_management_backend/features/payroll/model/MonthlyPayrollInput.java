@@ -49,9 +49,27 @@ public class MonthlyPayrollInput {
     @Builder.Default
     private BigDecimal adHocDeduction = BigDecimal.ZERO;
 
+    @Column(nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal arrearsAmount = BigDecimal.ZERO;
+
+    @Column(length = 20)
+    @Builder.Default
+    private String taxRegime = "NEW";
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal declared80C;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal declared80D;
+
     @Column(nullable = false)
     @Builder.Default
     private Boolean isLocked = false;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Boolean isExempt = false;
 
     private String notes;
 

@@ -83,7 +83,7 @@ public class LeaveController {
     }
 
     @GetMapping("/pending/all")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('LEAVE_APPROVE_ALL')")
     public ResponseEntity<List<com.example.hr_management_backend.features.leaves.dto.LeaveRequestDto>> getAllPendingRequests() {
         return ResponseEntity.ok(leaveService.getAllPendingRequests());
     }

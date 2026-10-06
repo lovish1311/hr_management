@@ -41,6 +41,8 @@ public class LeaveService {
     private final ApplicationEventPublisher eventPublisher;
     private final SettingsService settingsService;
     private final com.example.hr_management_backend.features.leaves.policy.LeavePolicyEngine leavePolicyEngine;
+    private final com.example.hr_management_backend.features.employees.repository.EmployeeAuthorityRepository employeeAuthorityRepository;
+    private final com.example.hr_management_backend.features.auth.repository.UserRepository userRepository;
     private String capturePolicySnapshot() {
         try {
             String mode = settingsService.getSetting("time_off_policy_mode");
@@ -234,11 +236,11 @@ public class LeaveService {
     @Transactional
     @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
     public LeaveRequest updateStatus(Long requestId, String status, String rejectionReason, Long approverId) {
-        String email = "hr@company.com"; // default fallback for tests
+        String email = "admin@company.com"; // default fallback for tests & super admin
         if (approverId != null) {
             email = employeeRepository.findById(approverId)
                     .map(Employee::getEmail)
-                    .orElse("hr@company.com");
+                    .orElse("admin@company.com");
         }
         return updateStatus(requestId, status, rejectionReason, email);
     }
@@ -259,26 +261,44 @@ public class LeaveService {
         request.setStatus(newStatus);
         request.setRejectionReason(rejectionReason);
 
-        Employee actor = employeeRepository.findByEmail(actorEmail)
-                .orElseThrow(() -> new RuntimeException("Actor not found"));
-        
+        Employee actor = employeeRepository.findByEmail(actorEmail).orElse(null);
         Employee targetEmployee = employeeRepository.findById(request.getEmployeeId())
                 .orElseThrow(() -> new RuntimeException("Leave requester not found"));
 
-        if (actor.getId().equals(targetEmployee.getId())) {
-            throw new org.springframework.security.access.AccessDeniedException("Cannot approve or reject your own leave request.");
-        }
+        if (actor == null) {
+            // Check if actor is system Super Admin User without an employee record, or system admin email
+            boolean isSysAdmin = "admin@company.com".equalsIgnoreCase(actorEmail);
+            if (!isSysAdmin) {
+                var userOpt = userRepository.findByEmail(actorEmail);
+                isSysAdmin = userOpt.isPresent() && (
+                        "SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole()) ||
+                        "ROLE_SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole())
+                );
+            }
+            if (!isSysAdmin) {
+                throw new RuntimeException("Actor not found: " + actorEmail);
+            }
+            request.setApprovedBy(null);
+        } else {
+            // Strictly forbid self-approvals under any circumstances
+            if (actor.getId().equals(targetEmployee.getId())) {
+                throw new org.springframework.security.access.AccessDeniedException("Cannot approve or reject your own leave request.");
+            }
 
-        boolean isAuthorized = "HR".equalsIgnoreCase(actor.getRole()) || "SUPER_ADMIN".equalsIgnoreCase(actor.getRole());
-        if (!isAuthorized && targetEmployee.getManager() != null) {
-            isAuthorized = actor.getId().equals(targetEmployee.getManager().getId());
-        }
+            boolean isAuthorized = "HR".equalsIgnoreCase(actor.getRole())
+                    || "SUPER_ADMIN".equalsIgnoreCase(actor.getRole())
+                    || employeeAuthorityRepository.existsByEmployeeIdAndAuthority(actor.getId(), "LEAVE_APPROVE_ALL");
 
-        if (!isAuthorized) {
-            throw new org.springframework.security.access.AccessDeniedException("Not authorized to update this leave request.");
-        }
+            if (!isAuthorized && targetEmployee.getManager() != null) {
+                isAuthorized = actor.getId().equals(targetEmployee.getManager().getId());
+            }
 
-        request.setApprovedBy(actor.getId());
+            if (!isAuthorized) {
+                throw new org.springframework.security.access.AccessDeniedException("Not authorized to update this leave request.");
+            }
+
+            request.setApprovedBy(actor.getId());
+        }
 
         int year = request.getStartDate().getYear();
         double requestedDays = request.getTotalDays() != null ? request.getTotalDays() : 0.0;

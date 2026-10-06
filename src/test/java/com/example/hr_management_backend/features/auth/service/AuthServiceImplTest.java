@@ -38,6 +38,9 @@ class AuthServiceImplTest {
     private EmployeeRepository employeeRepository;
 
     @Mock
+    private com.example.hr_management_backend.features.employees.repository.EmployeeAuthorityRepository employeeAuthorityRepository;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
@@ -57,6 +60,7 @@ class AuthServiceImplTest {
                 .role("EMPLOYEE")
                 .employeeId(10L)
                 .build();
+        lenient().when(employeeAuthorityRepository.findAuthoritiesByEmployeeId(any())).thenReturn(java.util.Collections.emptyList());
     }
 
     @Test

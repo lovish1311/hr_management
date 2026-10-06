@@ -5,11 +5,13 @@ import com.example.hr_management_backend.features.leaves.model.LeaveRequest;
 import com.example.hr_management_backend.features.leaves.repository.LeaveBalanceRepository;
 import com.example.hr_management_backend.features.leaves.repository.LeaveRequestRepository;
 import com.example.hr_management_backend.features.leaves.service.LeaveService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.hr_management_backend.features.employees.model.Employee;
 
 import java.time.LocalDate;
 
@@ -37,10 +39,36 @@ public class LeavePolicyTest {
     @Autowired
     private com.example.hr_management_backend.features.employees.repository.EmployeeRepository employeeRepository;
 
+    private Long empId;
+    private Long approverId;
+
+    @BeforeEach
+    void setUp() {
+        Employee mgr = employeeRepository.findByEmail("harsh.kaushal@company.com").orElseGet(() ->
+                employeeRepository.save(Employee.builder()
+                        .email("harsh.kaushal@company.com")
+                        .firstName("Harsh")
+                        .lastName("Kaushal")
+                        .role("MANAGER")
+                        .employeeCode("EMP-101")
+                        .build()));
+        approverId = mgr.getId();
+
+        Employee emp = employeeRepository.findByEmail("policy.test@company.com").orElseGet(() ->
+                employeeRepository.save(Employee.builder()
+                        .email("policy.test@company.com")
+                        .firstName("Policy")
+                        .lastName("Tester")
+                        .role("EMPLOYEE")
+                        .employeeCode("POL_001")
+                        .manager(mgr)
+                        .build()));
+        empId = emp.getId();
+    }
+
     @Test
     @DisplayName("SCENARIO 1: Employee applies for leaves and Deduct-on-Submit balance validation is enforced")
     public void testEmployeeDeductOnSubmit() {
-        Long empId = 2L; // Lovish Kumar
         int year = 2026;
 
         // 1. Fetch initial balance
@@ -81,7 +109,6 @@ public class LeavePolicyTest {
     @Test
     @DisplayName("SCENARIO 2: Admin applies leave on behalf of employee (Direct Approval & Used Update)")
     public void testAdminApplyOnBehalf() {
-        Long empId = 2L;
         int year = 2026;
 
         LeaveBalance initialBal = leaveService.getOrCreateLeaveBalance(empId, year);
@@ -108,9 +135,6 @@ public class LeavePolicyTest {
     @Test
     @DisplayName("SCENARIO 3 & 4: Admin approves/rejects leaves and withdraws approved leave")
     public void testApprovalRejectionAndWithdrawal() {
-        Long empId = 2L;
-        Long approverId = 101L;
-
         // Apply for Sick Leave (1 day)
         LeaveRequest sickReq = LeaveRequest.builder()
                 .employeeId(empId)
@@ -151,8 +175,6 @@ public class LeavePolicyTest {
     @Test
     @DisplayName("SCENARIO 5: Rejecting pending, approved leaves and short leaves reverts leave balance to positive")
     public void testRejectionRevertsLeaveBalanceAndShortLeave() {
-        Long empId = 2L;
-        Long approverId = 101L;
         int year = 2026;
 
         // 1. Initial balance check
@@ -224,8 +246,6 @@ public class LeavePolicyTest {
     @Test
     @DisplayName("SCENARIO 6: Verify isTimeBased field classification and exact duration-based hourly accumulation")
     public void testIsTimeBasedFieldAndHourlyDuration() {
-        Long empId = 3L;
-
         // 1. Submit Short Break with start and end times (e.g. 10:00 to 11:30 = 1.5 hours)
         LeaveRequest shortBreak = LeaveRequest.builder()
                 .employeeId(empId)

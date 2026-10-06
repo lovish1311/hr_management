@@ -69,6 +69,9 @@ public class Employee {
     private Boolean isAttendanceTracked = true; // HR toggle to enable/disable attendance tracking
 
     @Builder.Default
+    private Boolean isPayrollExempt = false; // HR toggle to exempt employee from payroll processing
+
+    @Builder.Default
     @Column(name = "has_tambola_access")
     private Boolean hasTambolaAccess = false; // Admin grant for Tambola game management
 
