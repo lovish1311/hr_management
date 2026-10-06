@@ -13,6 +13,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/games/draw-and-guess")
+@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class DrawGuessController {
 
