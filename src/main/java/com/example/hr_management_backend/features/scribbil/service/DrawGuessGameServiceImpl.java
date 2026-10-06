@@ -181,8 +181,8 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
         }
 
         List<DrawGuessPlayer> players = playerRepository.findByRoomCodeOrderByTurnOrderAsc(code);
-        if (players.isEmpty()) {
-            throw new IllegalStateException("Cannot start game with zero players.");
+        if (players.size() < 2) {
+            throw new IllegalStateException("Minimum 2 players required to start Draw & Guess game.");
         }
 
         // Shuffle turn order
@@ -429,6 +429,15 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
     @Override
     public void handleStroke(DrawStrokeDto stroke, String employeeEmail) {
         String code = stroke.getRoomCode().trim().toUpperCase();
+        DrawGuessRoom room = roomRepository.findByRoomCode(code).orElse(null);
+        if (room == null || room.getState() != DrawGuessGameState.DRAWING) return;
+
+        Employee emp = employeeEmail != null ? employeeRepository.findByEmail(employeeEmail).orElse(null) : null;
+        if (emp != null && !emp.getId().equals(room.getActiveDrawerEmployeeId())) {
+            log.warn("Blocked non-drawer empId={} from submitting stroke in room {}", emp.getId(), code);
+            return;
+        }
+
         ActiveRoomRuntime runtime = activeRooms.get(code);
         if (runtime == null) return;
 
@@ -445,6 +454,15 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
     @Override
     public void clearCanvas(String roomCode, String employeeEmail) {
         String code = roomCode.trim().toUpperCase();
+        DrawGuessRoom room = roomRepository.findByRoomCode(code).orElse(null);
+        if (room == null || room.getState() != DrawGuessGameState.DRAWING) return;
+
+        Employee emp = employeeEmail != null ? employeeRepository.findByEmail(employeeEmail).orElse(null) : null;
+        if (emp != null && !emp.getId().equals(room.getActiveDrawerEmployeeId())) {
+            log.warn("Blocked non-drawer empId={} from clearing canvas in room {}", emp.getId(), code);
+            return;
+        }
+
         ActiveRoomRuntime runtime = activeRooms.get(code);
         if (runtime != null) {
             runtime.clearCanvas();
@@ -455,6 +473,15 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
     @Override
     public void undoStroke(String roomCode, String employeeEmail) {
         String code = roomCode.trim().toUpperCase();
+        DrawGuessRoom room = roomRepository.findByRoomCode(code).orElse(null);
+        if (room == null || room.getState() != DrawGuessGameState.DRAWING) return;
+
+        Employee emp = employeeEmail != null ? employeeRepository.findByEmail(employeeEmail).orElse(null) : null;
+        if (emp != null && !emp.getId().equals(room.getActiveDrawerEmployeeId())) {
+            log.warn("Blocked non-drawer empId={} from undoing stroke in room {}", emp.getId(), code);
+            return;
+        }
+
         ActiveRoomRuntime runtime = activeRooms.get(code);
         if (runtime != null) {
             runtime.undoLastStroke();
@@ -468,6 +495,16 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
         String code = roomCode.trim().toUpperCase();
         DrawGuessRoom room = roomRepository.findByRoomCode(code)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found: " + code));
+
+        if (guess == null || guess.trim().isEmpty()) {
+            return GuessResultDto.builder()
+                    .roomCode(code)
+                    .guess("")
+                    .isCorrect(false)
+                    .isClose(false)
+                    .message("Guess cannot be empty.")
+                    .build();
+        }
 
         if (room.getState() != DrawGuessGameState.DRAWING) {
             return GuessResultDto.builder()
@@ -816,6 +853,9 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
     @Transactional
     public void handlePlayerDisconnect(String roomCode, Long employeeId) {
         String code = roomCode.trim().toUpperCase();
+        DrawGuessRoom room = roomRepository.findByRoomCode(code).orElse(null);
+        if (room == null) return;
+
         playerRepository.findByRoomCodeAndEmployeeId(code, employeeId).ifPresent(p -> {
             p.setIsConnected(false);
             playerRepository.save(p);
@@ -826,6 +866,40 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                     "employeeId", employeeId,
                     "employeeName", p.getEmployeeName()
             ));
+
+            // Host migration if in lobby and host disconnects
+            if (p.getIsHost() && room.getState() == DrawGuessGameState.LOBBY) {
+                List<DrawGuessPlayer> remaining = playerRepository.findByRoomCodeAndIsConnectedTrue(code);
+                if (!remaining.isEmpty()) {
+                    DrawGuessPlayer newHost = remaining.get(0);
+                    newHost.setIsHost(true);
+                    playerRepository.save(newHost);
+                    p.setIsHost(false);
+                    playerRepository.save(p);
+                    room.setHostEmployeeId(newHost.getEmployeeId());
+                    room.setHostName(newHost.getEmployeeName());
+                    roomRepository.save(room);
+
+                    sessionManager.broadcast(code, Map.of(
+                            "type", "HOST_MIGRATED",
+                            "roomCode", code,
+                            "newHostId", newHost.getEmployeeId(),
+                            "newHostName", newHost.getEmployeeName()
+                    ));
+                }
+            }
+
+            // Drawer disconnected during active drawing / word selection
+            if (employeeId.equals(room.getActiveDrawerEmployeeId())
+                    && (room.getState() == DrawGuessGameState.DRAWING || room.getState() == DrawGuessGameState.WORD_SELECTION)) {
+                log.info("Active drawer {} disconnected in room {}. Ending turn.", employeeId, code);
+                sessionManager.broadcast(code, Map.of(
+                        "type", "DRAWER_DISCONNECTED",
+                        "roomCode", code,
+                        "message", "Drawer disconnected. Advancing to next turn..."
+                ));
+                gameScheduler.schedule(() -> concludeTurn(code, false), 2, TimeUnit.SECONDS);
+            }
         });
     }
 

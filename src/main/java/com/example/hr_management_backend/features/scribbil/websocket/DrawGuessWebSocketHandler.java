@@ -3,6 +3,8 @@ package com.example.hr_management_backend.features.scribbil.websocket;
 import com.example.hr_management_backend.core.security.JwtUtils;
 import com.example.hr_management_backend.features.employees.model.Employee;
 import com.example.hr_management_backend.features.employees.repository.EmployeeRepository;
+import com.example.hr_management_backend.features.scribbil.repository.DrawGuessRoomRepository;
+import com.example.hr_management_backend.features.scribbil.model.DrawGuessRoom;
 import com.example.hr_management_backend.features.scribbil.dto.DrawStrokeDto;
 import com.example.hr_management_backend.features.scribbil.model.StrokeType;
 import com.example.hr_management_backend.features.scribbil.service.DrawGuessGameService;
@@ -32,6 +34,7 @@ public class DrawGuessWebSocketHandler extends TextWebSocketHandler {
     private final ObjectMapper objectMapper;
     private final JwtUtils jwtUtils;
     private final EmployeeRepository employeeRepository;
+    private final DrawGuessRoomRepository roomRepository;
     @Lazy private final DrawGuessGameService gameService;
 
     @Override
@@ -137,16 +140,27 @@ public class DrawGuessWebSocketHandler extends TextWebSocketHandler {
                 }
                 case "START_GAME" -> gameService.startGame(roomCode, employeeEmail);
                 case "CHAT" -> {
-                    String text = root.path("message").asText("");
-                    if (!text.isBlank()) {
-                        String senderName = employeeRepository.findById(employeeId)
+                    String chatText = root.path("message").asText("");
+                    if (!chatText.isBlank()) {
+                        String senderName = employeeId != null ? employeeRepository.findById(employeeId)
                                 .map(e -> e.getFirstName() + " " + e.getLastName())
-                                .orElse("Player");
+                                .orElse("Player") : "Player";
+
+                        // Anti-spoiler filter: check if secret word is in message
+                        String filteredMessage = chatText;
+                        DrawGuessRoom room = roomRepository.findByRoomCode(roomCode).orElse(null);
+                        if (room != null && room.getCurrentWord() != null) {
+                            String secret = room.getCurrentWord().trim().toLowerCase();
+                            if (chatText.toLowerCase().contains(secret)) {
+                                filteredMessage = chatText.replaceAll("(?i)" + java.util.regex.Pattern.quote(secret), "***");
+                            }
+                        }
+
                         Map<String, Object> chatMsg = Map.of(
                                 "type", "CHAT_MESSAGE",
                                 "employeeId", employeeId != null ? employeeId : 0,
                                 "senderName", senderName,
-                                "message", text,
+                                "message", filteredMessage,
                                 "timestamp", System.currentTimeMillis()
                         );
                         sessionManager.broadcast(roomCode, chatMsg);
