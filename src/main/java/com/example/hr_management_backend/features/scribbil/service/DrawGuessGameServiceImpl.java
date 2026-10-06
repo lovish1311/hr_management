@@ -144,6 +144,7 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                 "type", "PLAYER_JOINED",
                 "roomCode", roomCode,
                 "player", mapToPlayerDto(player),
+                "players", playerDtos,
                 "totalPlayers", playerDtos.size()
         );
         sessionManager.broadcast(roomCode, joinedEvent);
@@ -860,11 +861,18 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             p.setIsConnected(false);
             playerRepository.save(p);
 
+            List<DrawGuessPlayerDto> playerDtos = playerRepository.findByRoomCodeOrderByTurnOrderAsc(code)
+                    .stream()
+                    .map(this::mapToPlayerDto)
+                    .toList();
+
             sessionManager.broadcast(code, Map.of(
                     "type", "PLAYER_DISCONNECTED",
                     "roomCode", code,
                     "employeeId", employeeId,
-                    "employeeName", p.getEmployeeName()
+                    "employeeName", p.getEmployeeName(),
+                    "player", mapToPlayerDto(p),
+                    "players", playerDtos
             ));
 
             // Host migration if in lobby and host disconnects
@@ -911,11 +919,18 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             p.setIsConnected(true);
             playerRepository.save(p);
 
+            List<DrawGuessPlayerDto> playerDtos = playerRepository.findByRoomCodeOrderByTurnOrderAsc(code)
+                    .stream()
+                    .map(this::mapToPlayerDto)
+                    .toList();
+
             sessionManager.broadcast(code, Map.of(
                     "type", "PLAYER_RECONNECTED",
                     "roomCode", code,
                     "employeeId", employeeId,
-                    "employeeName", p.getEmployeeName()
+                    "employeeName", p.getEmployeeName(),
+                    "player", mapToPlayerDto(p),
+                    "players", playerDtos
             ));
         });
     }
