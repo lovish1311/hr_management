@@ -1,5 +1,6 @@
 package com.example.hr_management_backend.features.employees.service;
 
+import com.example.hr_management_backend.core.exception.ResourceNotFoundException;
 import com.example.hr_management_backend.features.employees.dto.EmployeeDetailDto;
 import com.example.hr_management_backend.features.employees.dto.EmployeeSummaryDto;
 import com.example.hr_management_backend.features.employees.model.Employee;
@@ -59,7 +60,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public Employee updateEmployee(Long id, Employee employeeDetails) {
         Employee employee = employeeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Employee not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + id));
 
         employee.setFirstName(employeeDetails.getFirstName());
         employee.setLastName(employeeDetails.getLastName());
@@ -86,8 +87,16 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Transactional(readOnly = true)
     @Cacheable(value = "employees")
     public List<EmployeeSummaryDto> getAllEmployeesSummary() {
-        return employeeRepository.findByRoleNotIgnoreCase("SUPER_ADMIN").stream()
-                .map(this::mapToSummaryDto)
+        List<Employee> employees = employeeRepository.findByRoleNotIgnoreCase("SUPER_ADMIN");
+        List<Long> employeeIds = employees.stream().map(Employee::getId).toList();
+        java.util.Map<Long, List<String>> authoritiesMap = employeeAuthorityRepository.findByEmployeeIdIn(employeeIds).stream()
+                .collect(Collectors.groupingBy(
+                        EmployeeAuthority::getEmployeeId,
+                        Collectors.mapping(EmployeeAuthority::getAuthority, Collectors.toList())
+                ));
+
+        return employees.stream()
+                .map(e -> mapToSummaryDto(e, authoritiesMap.getOrDefault(e.getId(), java.util.Collections.emptyList())))
                 .collect(Collectors.toList());
     }
 
@@ -95,14 +104,24 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Transactional(readOnly = true)
     public Page<EmployeeSummaryDto> searchEmployees(String query, String department, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
+        Page<Employee> pageResult;
 
         if (query != null && !query.isBlank()) {
-            return employeeRepository.searchEmployees(query, pageable).map(this::mapToSummaryDto);
+            pageResult = employeeRepository.searchEmployees(query, pageable);
         } else if (department != null && !department.isBlank()) {
-            return employeeRepository.findByDepartmentAndRoleNotIgnoreCase(department, "SUPER_ADMIN", pageable).map(this::mapToSummaryDto);
+            pageResult = employeeRepository.findByDepartmentAndRoleNotIgnoreCase(department, "SUPER_ADMIN", pageable);
         } else {
-            return employeeRepository.findByRoleNotIgnoreCase("SUPER_ADMIN", pageable).map(this::mapToSummaryDto);
+            pageResult = employeeRepository.findByRoleNotIgnoreCase("SUPER_ADMIN", pageable);
         }
+
+        List<Long> pageIds = pageResult.getContent().stream().map(Employee::getId).toList();
+        java.util.Map<Long, List<String>> authoritiesMap = employeeAuthorityRepository.findByEmployeeIdIn(pageIds).stream()
+                .collect(Collectors.groupingBy(
+                        EmployeeAuthority::getEmployeeId,
+                        Collectors.mapping(EmployeeAuthority::getAuthority, Collectors.toList())
+                ));
+
+        return pageResult.map(e -> mapToSummaryDto(e, authoritiesMap.getOrDefault(e.getId(), java.util.Collections.emptyList())));
     }
 
     @Override
@@ -110,7 +129,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Cacheable(value = "employee_details", key = "#id")
     public EmployeeDetailDto getEmployeeDetail(Long id) {
         Employee employee = employeeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Employee not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + id));
         return mapToDetailDto(employee);
     }
 
@@ -119,11 +138,11 @@ public class EmployeeServiceImpl implements EmployeeService {
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public EmployeeSummaryDto assignManager(Long employeeId, Long managerId) {
         Employee employee = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + employeeId));
 
         if (managerId != null) {
             Employee manager = employeeRepository.findById(managerId)
-                    .orElseThrow(() -> new RuntimeException("Manager not found with id: " + managerId));
+                    .orElseThrow(() -> new ResourceNotFoundException("Manager not found with id: " + managerId));
             
             // Automatically elevate role to MANAGER if currently EMPLOYEE
             if ("EMPLOYEE".equalsIgnoreCase(manager.getRole())) {
@@ -228,7 +247,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .orElse(14);
     }
 
-    private EmployeeSummaryDto mapToSummaryDto(Employee employee) {
+    private EmployeeSummaryDto mapToSummaryDto(Employee employee, List<String> authorities) {
         String managerName = null;
         Long managerId = null;
         if (employee.getManager() != null) {
@@ -256,7 +275,13 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .managerName(managerName)
                 .todayAttendanceStatus(computeTodayStatus(employee))
                 .leaveBalance(computeLeaveBalance(employee.getId()))
+                .authorities(authorities != null ? authorities : java.util.Collections.emptyList())
                 .build();
+    }
+
+    private EmployeeSummaryDto mapToSummaryDto(Employee employee) {
+        List<String> authorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(employee.getId());
+        return mapToSummaryDto(employee, authorities);
     }
 
     @Override
@@ -264,7 +289,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public EmployeeDetailDto elevateRoleAndPermissions(Long employeeId, ElevateEmployeeDto dto, String actorEmail) {
         Employee employee = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new RuntimeException("Employee not found with id: " + employeeId));
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + employeeId));
 
         if (dto.getRole() != null && !dto.getRole().isBlank()) {
             String newRole = dto.getRole().trim().toUpperCase().replace("ROLE_", "");
