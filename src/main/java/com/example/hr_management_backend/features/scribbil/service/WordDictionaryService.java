@@ -101,6 +101,139 @@ public class WordDictionaryService {
         }
     }
 
+    @org.springframework.beans.factory.annotation.Value("${gemini.api.key:}")
+    private String geminiApiKey;
+
+    @org.springframework.beans.factory.annotation.Value("${gemini.api.model:gemini-3.1-flash-lite}")
+    private String geminiModel;
+
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    public List<String> generateWordsForGame(String category, int count) {
+        int targetCount = Math.max(count, 45);
+        List<String> aiWords = fetchWordsFromGemini(category, targetCount);
+        if (aiWords != null && aiWords.size() >= 15) {
+            log.info("Successfully generated {} Draw & Guess words via Gemini AI for category '{}'", aiWords.size(), category);
+            return aiWords;
+        }
+
+        log.warn("Gemini word generation returned insufficient words ({}), falling back to built-in dictionary",
+                aiWords != null ? aiWords.size() : 0);
+        return getFallbackWords(category, targetCount);
+    }
+
+    private List<String> fetchWordsFromGemini(String category, int count) {
+        String cat = (category == null || category.isBlank()) ? "GENERAL" : category.trim();
+        String prompt = String.format(
+                "Generate a JSON array of %d unique, single-word or simple two-word common nouns suitable for a Draw & Guess (skribbl) game under the category '%s'. " +
+                "Only common objects, animals, places, or everyday concepts that people can easily draw and guess. " +
+                "Return ONLY a valid JSON array of strings, for example: [\"Apple\", \"Giraffe\", \"Waterfall\"]. Do NOT include markdown blocks, explanations, or quotes outside the array.",
+                count, cat
+        );
+
+        String[] modelCandidates = {
+            (geminiModel != null && !geminiModel.isBlank()) ? geminiModel : "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-flash-latest"
+        };
+
+        for (String model : modelCandidates) {
+            try {
+                String endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent?key=" + geminiApiKey;
+                java.net.URL url = new java.net.URL(endpoint);
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
+                conn.setConnectTimeout(3000);
+                conn.setReadTimeout(3500);
+
+                Map<String, Object> reqBody = Map.of(
+                        "contents", List.of(
+                                Map.of("parts", List.of(
+                                        Map.of("text", prompt)
+                                ))
+                        )
+                );
+
+                byte[] bodyBytes = objectMapper.writeValueAsBytes(reqBody);
+                try (java.io.OutputStream os = conn.getOutputStream()) {
+                    os.write(bodyBytes);
+                }
+
+                int statusCode = conn.getResponseCode();
+                if (statusCode >= 200 && statusCode < 300) {
+                    try (java.io.InputStream is = conn.getInputStream()) {
+                        com.fasterxml.jackson.databind.JsonNode rootNode = objectMapper.readTree(is);
+                        com.fasterxml.jackson.databind.JsonNode textNode = rootNode.path("candidates").path(0)
+                                .path("content").path("parts").path(0).path("text");
+                        if (!textNode.isMissingNode() && !textNode.asText().isBlank()) {
+                            String rawText = textNode.asText().trim();
+                            // Clean potential markdown blocks
+                            if (rawText.startsWith("```")) {
+                                int firstLine = rawText.indexOf('\n');
+                                int lastBlock = rawText.lastIndexOf("```");
+                                if (firstLine != -1 && lastBlock > firstLine) {
+                                    rawText = rawText.substring(firstLine + 1, lastBlock).trim();
+                                }
+                            }
+
+                            List<String> parsedWords = objectMapper.readValue(
+                                    rawText,
+                                    objectMapper.getTypeFactory().constructCollectionType(List.class, String.class)
+                            );
+
+                            List<String> cleaned = parsedWords.stream()
+                                    .map(String::trim)
+                                    .filter(w -> !w.isBlank() && w.length() >= 2 && w.length() <= 20)
+                                    .distinct()
+                                    .toList();
+
+                            if (!cleaned.isEmpty()) {
+                                return new ArrayList<>(cleaned);
+                            }
+                        }
+                    }
+                } else {
+                    log.warn("Gemini model {} returned HTTP status {}", model, statusCode);
+                }
+            } catch (Exception e) {
+                log.warn("Failed fetching words from Gemini model {}: {}", model, e.getMessage());
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    public List<String> getFallbackWords(String category, int count) {
+        List<DrawGuessWord> dbWords;
+        if (category == null || "ALL".equalsIgnoreCase(category) || "GENERAL".equalsIgnoreCase(category)) {
+            dbWords = wordRepository.findAll();
+        } else {
+            dbWords = wordRepository.findByCategory(category.toUpperCase());
+        }
+
+        Set<String> words = new LinkedHashSet<>();
+        if (dbWords != null) {
+            for (DrawGuessWord w : dbWords) {
+                words.add(w.getWord().trim());
+            }
+        }
+
+        for (WordSeed s : DEFAULT_WORDS) {
+            if (category == null || "ALL".equalsIgnoreCase(category) || "GENERAL".equalsIgnoreCase(category)
+                    || s.category.equalsIgnoreCase(category)) {
+                words.add(s.word.trim());
+            }
+        }
+
+        List<String> list = new ArrayList<>(words);
+        Collections.shuffle(list);
+        if (list.size() > count) {
+            return new ArrayList<>(list.subList(0, count));
+        }
+        return list;
+    }
+
     public List<WordOptionDto> getRandomWordOptions(String category, int count) {
         List<DrawGuessWord> dbWords;
         if (category == null || "ALL".equalsIgnoreCase(category) || "GENERAL".equalsIgnoreCase(category)) {
@@ -144,3 +277,4 @@ public class WordDictionaryService {
 
     private record WordSeed(String word, String category, String difficulty, String hint) {}
 }
+

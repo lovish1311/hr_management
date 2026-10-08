@@ -31,6 +31,7 @@ public class RoundResultDto {
         private String employeeName;
         private Integer pointsEarned;
         private Integer totalScore;
+        private Integer rank;
         private Boolean guessedCorrectly;
     }
 }

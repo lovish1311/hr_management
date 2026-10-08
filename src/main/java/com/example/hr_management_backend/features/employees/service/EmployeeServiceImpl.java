@@ -1,6 +1,7 @@
 package com.example.hr_management_backend.features.employees.service;
 
 import com.example.hr_management_backend.core.exception.ResourceNotFoundException;
+import com.example.hr_management_backend.features.auth.model.User;
 import com.example.hr_management_backend.features.employees.dto.EmployeeDetailDto;
 import com.example.hr_management_backend.features.employees.dto.EmployeeSummaryDto;
 import com.example.hr_management_backend.features.employees.model.Employee;
@@ -43,6 +44,9 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final LeaveBalanceRepository leaveBalanceRepository;
     private final EmployeeAuthorityRepository employeeAuthorityRepository;
     private final UserRepository userRepository;
+    private final com.example.hr_management_backend.features.auth.websocket.PermissionWebSocketSessionManager permissionWebSocketSessionManager;
+    @org.springframework.beans.factory.annotation.Qualifier("dbExecutor")
+    private final java.util.concurrent.Executor dbExecutor;
 
     @Override
     @Transactional
@@ -209,6 +213,23 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         Employee saved = employeeRepository.save(employee);
+
+        try {
+            List<String> currentAuthorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(employeeId);
+            permissionWebSocketSessionManager.sendPermissionUpdate(employeeId, java.util.Map.of(
+                    "type", "PERMISSIONS_UPDATED",
+                    "employeeId", employeeId,
+                    "role", saved.getRole() != null ? saved.getRole() : "EMPLOYEE",
+                    "systemRole", saved.getSystemRole() != null ? saved.getSystemRole() : "NONE",
+                    "authorities", currentAuthorities,
+                    "hasTambolaAccess", Boolean.TRUE.equals(saved.getHasTambolaAccess()),
+                    "isAttendanceTracked", Boolean.TRUE.equals(saved.getIsAttendanceTracked()),
+                    "timestamp", System.currentTimeMillis()
+            ));
+        } catch (Exception e) {
+            log.warn("Failed to dispatch permission update WebSocket event for employeeId {}: {}", employeeId, e.getMessage());
+        }
+
         return mapToDetailDto(saved);
     }
 
@@ -264,6 +285,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .department(employee.getDepartment())
                 .designation(employee.getDesignation())
                 .role(employee.getRole())
+                .systemRole(employee.getSystemRole())
                 .status(employee.getStatus())
                 .phoneNumber(employee.getPhoneNumber())
                 .joiningDate(employee.getJoiningDate())
@@ -288,20 +310,104 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Transactional
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public EmployeeDetailDto elevateRoleAndPermissions(Long employeeId, ElevateEmployeeDto dto, String actorEmail) {
+        User actorUser = userRepository.findByEmail(actorEmail).orElse(null);
+        boolean isActorSuperAdmin = "admin@company.com".equalsIgnoreCase(actorEmail) ||
+                (actorUser != null && ("SUPER_ADMIN".equalsIgnoreCase(actorUser.getSystemRole()) ||
+                                       "ROLE_SUPER_ADMIN".equalsIgnoreCase(actorUser.getRole()) ||
+                                       "SUPER_ADMIN".equalsIgnoreCase(actorUser.getRole())));
+
+        boolean isActorAdmin = isActorSuperAdmin ||
+                (actorUser != null && ("ADMIN".equalsIgnoreCase(actorUser.getSystemRole()) ||
+                                       "ROLE_ADMIN".equalsIgnoreCase(actorUser.getRole()) ||
+                                       "ADMIN".equalsIgnoreCase(actorUser.getRole())));
+
+        if (!isActorAdmin && !isActorSuperAdmin) {
+            throw new org.springframework.security.access.AccessDeniedException("Access denied: only Administrators or Super Administrators can modify employee roles.");
+        }
+
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + employeeId));
 
+        boolean isTargetSuperAdmin = "SUPER_ADMIN".equalsIgnoreCase(employee.getSystemRole()) ||
+                "SUPER_ADMIN".equalsIgnoreCase(employee.getRole()) ||
+                "admin@company.com".equalsIgnoreCase(employee.getEmail());
+
+        boolean isTargetAdmin = isTargetSuperAdmin || "ADMIN".equalsIgnoreCase(employee.getSystemRole());
+
+        // 1. Guard against modifying or demoting Super Admin
+        if (isTargetSuperAdmin) {
+            if (!isActorSuperAdmin || "admin@company.com".equalsIgnoreCase(employee.getEmail())) {
+                throw new org.springframework.security.access.AccessDeniedException("Super Administrator account cannot be modified or demoted.");
+            }
+        }
+
+        // 2. Guard for regular Admin actor
+        if (!isActorSuperAdmin) {
+            // Admin cannot change another Admin's role or permissions, nor Super Admin's
+            if (isTargetAdmin) {
+                throw new org.springframework.security.access.AccessDeniedException("Admins cannot modify, demote, or revoke roles of other Admins or Super Admins. Only Super Admin has this privilege.");
+            }
+            // Admin cannot grant Super Admin access (only 1 single root Super Admin exists)
+            if (dto.getSystemRole() != null && "SUPER_ADMIN".equalsIgnoreCase(dto.getSystemRole())) {
+                throw new org.springframework.security.access.AccessDeniedException("Admins cannot assign the Super Admin role.");
+            }
+            if (dto.getRole() != null && "SUPER_ADMIN".equalsIgnoreCase(dto.getRole())) {
+                throw new org.springframework.security.access.AccessDeniedException("Admins cannot assign the Super Admin role.");
+            }
+            // Co-Leader Rule: An Admin CAN promote a non-admin employee to ADMIN!
+            // But an Admin cannot demote any Admin (blocked by isTargetAdmin check above).
+        }
+
+        // Apply functional role if provided
         if (dto.getRole() != null && !dto.getRole().isBlank()) {
             String newRole = dto.getRole().trim().toUpperCase().replace("ROLE_", "");
-            employee.setRole(newRole);
-            employeeRepository.save(employee);
-
-            // Synchronize corresponding User entity if it exists
-            userRepository.findByEmail(employee.getEmail()).ifPresent(user -> {
-                user.setRole("ROLE_" + newRole);
-                userRepository.save(user);
-            });
+            if (!"SUPER_ADMIN".equalsIgnoreCase(newRole) && !"ADMIN".equalsIgnoreCase(newRole)) {
+                employee.setRole(newRole);
+            }
         }
+
+        // Apply system role if provided
+        if (dto.getSystemRole() != null && !dto.getSystemRole().isBlank()) {
+            String newSystemRole = dto.getSystemRole().trim().toUpperCase().replace("ROLE_", "");
+            if ("SUPER_ADMIN".equalsIgnoreCase(newSystemRole)) {
+                if (isActorSuperAdmin) {
+                    employee.setSystemRole("SUPER_ADMIN");
+                } else {
+                    throw new org.springframework.security.access.AccessDeniedException("Only Super Admin can assign the Super Admin role.");
+                }
+            } else if ("ADMIN".equalsIgnoreCase(newSystemRole)) {
+                // Allowed for both Super Admin and Admin (Co-Leader promotion)
+                employee.setSystemRole("ADMIN");
+            } else if ("NONE".equalsIgnoreCase(newSystemRole)) {
+                // Setting to NONE for an existing Admin is already blocked for regular admins by isTargetAdmin
+                employee.setSystemRole("NONE");
+            } else {
+                employee.setSystemRole(newSystemRole);
+            }
+        }
+
+        employeeRepository.save(employee);
+
+        // Synchronize corresponding User entity if it exists
+        userRepository.findByEmail(employee.getEmail()).ifPresent(user -> {
+            if (dto.getRole() != null && !dto.getRole().isBlank()) {
+                String newRole = dto.getRole().trim().toUpperCase().replace("ROLE_", "");
+                if (!"SUPER_ADMIN".equalsIgnoreCase(newRole) && !"ADMIN".equalsIgnoreCase(newRole)) {
+                    user.setRole("ROLE_" + newRole);
+                }
+            }
+            if (dto.getSystemRole() != null && !dto.getSystemRole().isBlank()) {
+                String newSystemRole = dto.getSystemRole().trim().toUpperCase().replace("ROLE_", "");
+                if ("SUPER_ADMIN".equalsIgnoreCase(newSystemRole)) {
+                    if (isActorSuperAdmin) {
+                        user.setSystemRole("SUPER_ADMIN");
+                    }
+                } else {
+                    user.setSystemRole(newSystemRole);
+                }
+            }
+            userRepository.save(user);
+        });
 
         // Atomically synchronize granular permissions in employee_authorities
         employeeAuthorityRepository.deleteByEmployeeId(employeeId);
@@ -318,8 +424,22 @@ public class EmployeeServiceImpl implements EmployeeService {
             employeeAuthorityRepository.saveAll(authoritiesToSave);
         }
 
-        log.info("Elevated role and authorities for employeeId={} (email={}) by actor={}. New role={}, authorities={}",
-                employeeId, employee.getEmail(), actorEmail, employee.getRole(), dto.getAuthorities());
+        log.info("Elevated role/authorities for employeeId={} (email={}) by actor={}. FunctionalRole={}, SystemRole={}, authorities={}",
+                employeeId, employee.getEmail(), actorEmail, employee.getRole(), employee.getSystemRole(), dto.getAuthorities());
+
+        try {
+            List<String> updatedAuthorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(employeeId);
+            permissionWebSocketSessionManager.sendPermissionUpdate(employeeId, java.util.Map.of(
+                    "type", "PERMISSIONS_UPDATED",
+                    "employeeId", employeeId,
+                    "role", employee.getRole() != null ? employee.getRole() : "EMPLOYEE",
+                    "systemRole", employee.getSystemRole() != null ? employee.getSystemRole() : "NONE",
+                    "authorities", updatedAuthorities,
+                    "timestamp", System.currentTimeMillis()
+            ));
+        } catch (Exception e) {
+            log.warn("Failed to dispatch elevation WebSocket event for employeeId {}: {}", employeeId, e.getMessage());
+        }
 
         return mapToDetailDto(employee);
     }
@@ -332,7 +452,21 @@ public class EmployeeServiceImpl implements EmployeeService {
             managerName = employee.getManager().getFirstName() + " " + employee.getManager().getLastName();
         }
 
-        List<String> authorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(employee.getId());
+        // Parallelize auxiliary DB lookups: authorities, today attendance status, and leave balance
+        java.util.concurrent.CompletableFuture<List<String>> authFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> employeeAuthorityRepository.findAuthoritiesByEmployeeId(employee.getId()),
+                dbExecutor
+        );
+        java.util.concurrent.CompletableFuture<String> statusFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> computeTodayStatus(employee),
+                dbExecutor
+        );
+        java.util.concurrent.CompletableFuture<Integer> balanceFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> computeLeaveBalance(employee.getId()),
+                dbExecutor
+        );
+
+        java.util.concurrent.CompletableFuture.allOf(authFuture, statusFuture, balanceFuture).join();
 
         return EmployeeDetailDto.builder()
                 .id(employee.getId())
@@ -343,6 +477,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .department(employee.getDepartment())
                 .designation(employee.getDesignation())
                 .role(employee.getRole())
+                .systemRole(employee.getSystemRole())
                 .joiningDate(employee.getJoiningDate())
                 .employmentType(employee.getEmploymentType())
                 .status(employee.getStatus())
@@ -359,10 +494,10 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .departmentCategory(employee.getDepartmentCategory())
                 .managerId(managerId)
                 .managerName(managerName)
-                .todayAttendanceStatus(computeTodayStatus(employee))
-                .leaveBalance(computeLeaveBalance(employee.getId()))
+                .todayAttendanceStatus(statusFuture.join())
+                .leaveBalance(balanceFuture.join())
                 .hasTambolaAccess(Boolean.TRUE.equals(employee.getHasTambolaAccess()))
-                .authorities(authorities)
+                .authorities(authFuture.join())
                 .build();
     }
 }

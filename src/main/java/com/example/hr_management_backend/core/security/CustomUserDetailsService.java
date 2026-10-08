@@ -29,13 +29,28 @@ public class CustomUserDetailsService implements UserDetailsService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
 
-        List<GrantedAuthority> grantedAuthorities = new ArrayList<>();
+        java.util.Set<String> authorityNames = new java.util.LinkedHashSet<>();
 
         String roleName = user.getRole();
-        if (!roleName.startsWith("ROLE_")) {
-            roleName = "ROLE_" + roleName;
+        if (roleName != null && !roleName.isBlank()) {
+            if (!roleName.startsWith("ROLE_")) {
+                roleName = "ROLE_" + roleName;
+            }
+            authorityNames.add(roleName);
         }
-        grantedAuthorities.add(new SimpleGrantedAuthority(roleName));
+
+        String systemRole = user.getSystemRole();
+        if ("SUPER_ADMIN".equalsIgnoreCase(systemRole) || "ROLE_SUPER_ADMIN".equalsIgnoreCase(user.getRole())) {
+            authorityNames.add("ROLE_SUPER_ADMIN");
+            authorityNames.add("ROLE_ADMIN");
+            authorityNames.add("ROLE_HR");
+            authorityNames.add("ROLE_MANAGER");
+            authorityNames.add("ROLE_EMPLOYEE");
+        } else if ("ADMIN".equalsIgnoreCase(systemRole) || "ROLE_ADMIN".equalsIgnoreCase(user.getRole())) {
+            authorityNames.add("ROLE_ADMIN");
+            authorityNames.add("ROLE_HR");
+            authorityNames.add("ROLE_MANAGER");
+        }
 
         Long empId = user.getEmployeeId();
         if (empId == null) {
@@ -46,10 +61,14 @@ public class CustomUserDetailsService implements UserDetailsService {
             List<String> authorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(empId);
             for (String auth : authorities) {
                 if (auth != null && !auth.isBlank()) {
-                    grantedAuthorities.add(new SimpleGrantedAuthority(auth.trim().toUpperCase()));
+                    authorityNames.add(auth.trim().toUpperCase());
                 }
             }
         }
+
+        List<GrantedAuthority> grantedAuthorities = authorityNames.stream()
+                .map(a -> (GrantedAuthority) new SimpleGrantedAuthority(a))
+                .toList();
 
         return new org.springframework.security.core.userdetails.User(
                 user.getEmail(),

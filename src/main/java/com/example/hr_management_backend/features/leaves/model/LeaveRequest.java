@@ -11,7 +11,9 @@ import java.time.LocalTime;
 @Table(name = "leave_requests", indexes = {
     @Index(name = "idx_leave_emp", columnList = "employeeId"),
     @Index(name = "idx_leave_status", columnList = "status"),
-    @Index(name = "idx_leave_emp_timebased", columnList = "employeeId, is_time_based, status, startDate")
+    @Index(name = "idx_leave_emp_timebased", columnList = "employeeId, is_time_based, status, startDate"),
+    @Index(name = "idx_leave_status_dates", columnList = "status, startDate, endDate"),
+    @Index(name = "idx_leave_emp_dates", columnList = "employeeId, startDate, endDate")
 })
 @Data
 @NoArgsConstructor

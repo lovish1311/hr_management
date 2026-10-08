@@ -20,6 +20,7 @@ public class EmployeeDetailDto {
     private String department;
     private String designation;
     private String role;
+    private String systemRole;
     private LocalDate joiningDate;
     private String employmentType;
     private String status;

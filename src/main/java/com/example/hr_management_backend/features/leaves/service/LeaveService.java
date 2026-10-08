@@ -100,17 +100,21 @@ public class LeaveService {
                     return leaveBalanceRepository.save(initial);
                 });
 
-        Double pendingCasual = leaveRequestRepository.sumPendingLeaves(employeeId, "CASUAL", year);
-        Double pendingSick = leaveRequestRepository.sumPendingLeaves(employeeId, "SICK", year);
-        Double pendingEarned = leaveRequestRepository.sumPendingLeaves(employeeId, "EARNED", year);
-        Double pendingWfh = leaveRequestRepository.sumPendingLeaves(employeeId, "WORK_FROM_HOME", year);
-        Double pendingRh = leaveRequestRepository.sumPendingLeaves(employeeId, "RESTRICTED_HOLIDAY", year);
+        // Single-trip aggregation query: fetch all pending sums grouped by type in 1 trip
+        java.util.Map<String, Double> pendingMap = new java.util.HashMap<>();
+        for (Object[] row : leaveRequestRepository.sumPendingLeavesGroupedByType(employeeId, year)) {
+            if (row != null && row.length >= 2 && row[0] != null && row[1] != null) {
+                String type = ((String) row[0]).toUpperCase().replace("_LEAVE", "");
+                Double val = ((Number) row[1]).doubleValue();
+                pendingMap.put(type, val);
+            }
+        }
 
-        balance.setCasualLeavePending(pendingCasual != null ? pendingCasual : 0.0);
-        balance.setSickLeavePending(pendingSick != null ? pendingSick : 0.0);
-        balance.setEarnedLeavePending(pendingEarned != null ? pendingEarned : 0.0);
-        balance.setWorkFromHomePending(pendingWfh != null ? pendingWfh : 0.0);
-        balance.setRestrictedHolidayPending(pendingRh != null ? pendingRh : 0.0);
+        balance.setCasualLeavePending(pendingMap.getOrDefault("CASUAL", 0.0));
+        balance.setSickLeavePending(pendingMap.getOrDefault("SICK", 0.0));
+        balance.setEarnedLeavePending(pendingMap.getOrDefault("EARNED", 0.0));
+        balance.setWorkFromHomePending(pendingMap.getOrDefault("WORK_FROM_HOME", 0.0));
+        balance.setRestrictedHolidayPending(pendingMap.getOrDefault("RESTRICTED_HOLIDAY", 0.0));
 
         return balance;
     }
@@ -272,7 +276,11 @@ public class LeaveService {
                 var userOpt = userRepository.findByEmail(actorEmail);
                 isSysAdmin = userOpt.isPresent() && (
                         "SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole()) ||
-                        "ROLE_SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole())
+                        "ROLE_SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole()) ||
+                        "ADMIN".equalsIgnoreCase(userOpt.get().getRole()) ||
+                        "ROLE_ADMIN".equalsIgnoreCase(userOpt.get().getRole()) ||
+                        "ADMIN".equalsIgnoreCase(userOpt.get().getSystemRole()) ||
+                        "SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getSystemRole())
                 );
             }
             if (!isSysAdmin) {
@@ -287,6 +295,8 @@ public class LeaveService {
 
             boolean isAuthorized = "HR".equalsIgnoreCase(actor.getRole())
                     || "SUPER_ADMIN".equalsIgnoreCase(actor.getRole())
+                    || "ADMIN".equalsIgnoreCase(actor.getSystemRole())
+                    || "SUPER_ADMIN".equalsIgnoreCase(actor.getSystemRole())
                     || employeeAuthorityRepository.existsByEmployeeIdAndAuthority(actor.getId(), "LEAVE_APPROVE_ALL");
 
             if (!isAuthorized && targetEmployee.getManager() != null) {

@@ -27,7 +27,6 @@ import java.util.Map;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor(onConstructor_ = {@Lazy})
 public class DrawGuessWebSocketHandler extends TextWebSocketHandler {
 
     private final DrawGuessWebSocketSessionManager sessionManager;
@@ -35,7 +34,22 @@ public class DrawGuessWebSocketHandler extends TextWebSocketHandler {
     private final JwtUtils jwtUtils;
     private final EmployeeRepository employeeRepository;
     private final DrawGuessRoomRepository roomRepository;
-    @Lazy private final DrawGuessGameService gameService;
+    private final DrawGuessGameService gameService;
+
+    public DrawGuessWebSocketHandler(
+            DrawGuessWebSocketSessionManager sessionManager,
+            ObjectMapper objectMapper,
+            JwtUtils jwtUtils,
+            EmployeeRepository employeeRepository,
+            DrawGuessRoomRepository roomRepository,
+            @Lazy DrawGuessGameService gameService) {
+        this.sessionManager = sessionManager;
+        this.objectMapper = objectMapper;
+        this.jwtUtils = jwtUtils;
+        this.employeeRepository = employeeRepository;
+        this.roomRepository = roomRepository;
+        this.gameService = gameService;
+    }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -92,6 +106,17 @@ public class DrawGuessWebSocketHandler extends TextWebSocketHandler {
                 "sessionId", session.getId()
         );
         session.sendMessage(new TextMessage(objectMapper.writeValueAsString(ack)));
+
+        // Synchronize existing drawing strokes to connecting session
+        List<DrawStrokeDto> history = gameService.getCanvasHistory(roomCode);
+        if (history != null && !history.isEmpty()) {
+            Map<String, Object> sync = Map.of(
+                    "type", "SYNC_CANVAS",
+                    "roomCode", roomCode.toUpperCase(),
+                    "strokes", history
+            );
+            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(sync)));
+        }
     }
 
     @Override
@@ -125,11 +150,11 @@ public class DrawGuessWebSocketHandler extends TextWebSocketHandler {
                     DrawStrokeDto stroke = objectMapper.treeToValue(root.path("stroke"), DrawStrokeDto.class);
                     if (stroke != null) {
                         stroke.setRoomCode(roomCode);
-                        gameService.handleStroke(stroke, employeeEmail);
+                        gameService.handleStroke(stroke, employeeId);
                     }
                 }
-                case "CLEAR" -> gameService.clearCanvas(roomCode, employeeEmail);
-                case "UNDO" -> gameService.undoStroke(roomCode, employeeEmail);
+                case "CLEAR" -> gameService.clearCanvas(roomCode, employeeId);
+                case "UNDO" -> gameService.undoStroke(roomCode, employeeId);
                 case "GUESS" -> {
                     String guess = root.path("guess").asText("");
                     gameService.submitGuess(roomCode, guess, employeeEmail);

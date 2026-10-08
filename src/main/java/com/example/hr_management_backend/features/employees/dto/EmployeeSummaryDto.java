@@ -18,6 +18,7 @@ public class EmployeeSummaryDto {
     private String department;
     private String designation;
     private String role;
+    private String systemRole;
     private String status;
     private String phoneNumber;
     private java.time.LocalDate joiningDate;

@@ -46,7 +46,7 @@ public class PayrollController {
     // =========================================================================
 
     @PostMapping("/structure")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN') or hasAuthority('SALARY_STRUCTURE_MANAGE')")
     public ResponseEntity<SalaryStructureDto> saveSalaryStructure(@RequestBody SalaryStructureDto dto) {
         return ResponseEntity.ok(processingService.saveSalaryStructure(dto));
     }
@@ -57,19 +57,19 @@ public class PayrollController {
     }
 
     @GetMapping("/structure")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN') or hasAuthority('SALARY_STRUCTURE_MANAGE') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<List<SalaryStructureDto>> getAllActiveSalaryStructures() {
         return ResponseEntity.ok(processingService.getAllActiveSalaryStructures());
     }
 
     @PostMapping("/inputs")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<MonthlyPayrollInputDto> saveMonthlyPayrollInput(@RequestBody MonthlyPayrollInputDto dto) {
         return ResponseEntity.ok(processingService.saveMonthlyPayrollInput(dto));
     }
 
     @GetMapping("/inputs")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<List<MonthlyPayrollInputDto>> getMonthlyPayrollInputs(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -79,7 +79,7 @@ public class PayrollController {
     }
 
     @PostMapping("/inputs/sync")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<List<MonthlyPayrollInputDto>> syncMonthlyPayrollInputs(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -89,7 +89,7 @@ public class PayrollController {
     }
 
     @PostMapping("/inputs/lock")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<Map<String, String>> lockInputs(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -100,7 +100,7 @@ public class PayrollController {
     }
 
     @PostMapping("/inputs/unlock")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<Map<String, String>> unlockInputs(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -115,7 +115,7 @@ public class PayrollController {
     // =========================================================================
 
     @PostMapping("/process")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<List<PayrollRecordDto>> processPayroll(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -125,7 +125,7 @@ public class PayrollController {
     }
 
     @PostMapping("/verify")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<Map<String, String>> verifyPayroll(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -140,7 +140,7 @@ public class PayrollController {
     // =========================================================================
 
     @PostMapping("/publish")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<Map<String, String>> publishPayroll(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -163,7 +163,7 @@ public class PayrollController {
     }
 
     @GetMapping("/records")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<List<PayrollRecordDto>> getPayrollRecordsForMonth(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -173,7 +173,7 @@ public class PayrollController {
     }
 
     @GetMapping("/summary")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<PayrollSummaryDto> getPayrollSummary(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -187,7 +187,7 @@ public class PayrollController {
     // =========================================================================
 
     @GetMapping("/reconciliation")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<PayrollReconciliationReportDto> getReconciliationReport(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -197,7 +197,7 @@ public class PayrollController {
     }
 
     @GetMapping("/export/bank-file")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<byte[]> exportBankPayoutFile(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {
@@ -212,13 +212,13 @@ public class PayrollController {
     }
 
     @PostMapping("/arrears")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<ArrearsDto> recordArrears(@RequestBody ArrearsDto dto) {
         return ResponseEntity.ok(arrearsService.recordManualArrears(dto));
     }
 
     @GetMapping("/arrears")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<List<ArrearsDto>> getPendingArrears(
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Integer year) {

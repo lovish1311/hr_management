@@ -24,7 +24,7 @@ public class EmployeeController {
     private final EmployeeService employeeService;
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<Employee> createEmployee(@RequestBody Employee employee) {
         return ResponseEntity.ok(employeeService.createEmployee(employee));
     }
@@ -53,7 +53,7 @@ public class EmployeeController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<Employee> updateEmployee(@PathVariable Long id, @RequestBody Employee employeeDetails) {
         try {
             return ResponseEntity.ok(employeeService.updateEmployee(id, employeeDetails));
@@ -63,7 +63,7 @@ public class EmployeeController {
     }
 
     @PatchMapping("/{id}/manager")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<EmployeeSummaryDto> assignManager(
             @PathVariable Long id,
             @Valid @RequestBody AssignManagerDto dto) {
@@ -71,7 +71,7 @@ public class EmployeeController {
     }
 
     @PatchMapping("/{id}/permissions")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<EmployeeDetailDto> updatePermissions(
             @PathVariable Long id,
             @RequestBody com.example.hr_management_backend.features.employees.dto.UpdatePermissionsDto dto) {
@@ -85,7 +85,7 @@ public class EmployeeController {
     }
 
     @PutMapping("/{id}/elevate")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
     public ResponseEntity<EmployeeDetailDto> elevateRoleAndPermissions(
             @PathVariable Long id,
             @Valid @RequestBody com.example.hr_management_backend.features.employees.dto.ElevateEmployeeDto dto,
@@ -128,7 +128,7 @@ public class EmployeeController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<Void> deleteEmployee(@PathVariable Long id) {
         employeeService.deleteEmployee(id);
         return ResponseEntity.noContent().build();

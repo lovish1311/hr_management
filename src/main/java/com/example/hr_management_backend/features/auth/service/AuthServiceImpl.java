@@ -48,9 +48,21 @@ public class AuthServiceImpl implements AuthService {
             empId = employeeRepository.findByEmail(user.getEmail()).map(com.example.hr_management_backend.features.employees.model.Employee::getId).orElse(null);
         }
 
-        java.util.List<String> authorities = java.util.Collections.emptyList();
+        java.util.Set<String> authoritySet = new java.util.LinkedHashSet<>();
         if (empId != null) {
-            authorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(empId);
+            authoritySet.addAll(employeeAuthorityRepository.findAuthoritiesByEmployeeId(empId));
+        }
+
+        String systemRole = user.getSystemRole();
+        if (systemRole == null || systemRole.isBlank()) {
+            systemRole = "NONE";
+        }
+        if ("SUPER_ADMIN".equalsIgnoreCase(user.getRole()) || "ROLE_SUPER_ADMIN".equalsIgnoreCase(user.getRole()) || "SUPER_ADMIN".equalsIgnoreCase(systemRole)) {
+            systemRole = "SUPER_ADMIN";
+            authoritySet.add("ROLE_SUPER_ADMIN");
+            authoritySet.add("ROLE_ADMIN");
+        } else if ("ADMIN".equalsIgnoreCase(systemRole) || "ROLE_ADMIN".equalsIgnoreCase(user.getRole())) {
+            authoritySet.add("ROLE_ADMIN");
         }
 
         return LoginResponse.builder()
@@ -59,8 +71,9 @@ public class AuthServiceImpl implements AuthService {
                 .id(user.getId())
                 .email(user.getEmail())
                 .role(user.getRole())
+                .systemRole(systemRole)
                 .employeeId(empId)
-                .authorities(authorities)
+                .authorities(new java.util.ArrayList<>(authoritySet))
                 .build();
     }
 

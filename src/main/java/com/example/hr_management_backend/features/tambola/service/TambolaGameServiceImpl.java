@@ -512,7 +512,9 @@ public class TambolaGameServiceImpl implements TambolaGameService {
 
     private void assertCanHost(Employee employee) {
         String role = employee.getRole() != null ? employee.getRole().toUpperCase() : "";
-        boolean isPrivileged = "SUPER_ADMIN".equals(role) || "HR".equals(role);
+        boolean isPrivileged = "SUPER_ADMIN".equals(role) || "HR".equals(role)
+                || "ADMIN".equalsIgnoreCase(employee.getSystemRole())
+                || "SUPER_ADMIN".equalsIgnoreCase(employee.getSystemRole());
         boolean hasTambolaAccess = Boolean.TRUE.equals(employee.getHasTambolaAccess());
 
         if (!isPrivileged && !hasTambolaAccess) {
