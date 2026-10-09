@@ -43,6 +43,7 @@ public class LeaveService {
     private final com.example.hr_management_backend.features.leaves.policy.LeavePolicyEngine leavePolicyEngine;
     private final com.example.hr_management_backend.features.employees.repository.EmployeeAuthorityRepository employeeAuthorityRepository;
     private final com.example.hr_management_backend.features.auth.repository.UserRepository userRepository;
+    private final com.example.hr_management_backend.features.email.service.EmailOutboxService emailOutboxService;
     private String capturePolicySnapshot() {
         try {
             String mode = settingsService.getSetting("time_off_policy_mode");
@@ -229,7 +230,23 @@ public class LeaveService {
             validateTimeBasedPolicy(request, type);
         }
 
-        return leaveRequestRepository.save(request);
+        LeaveRequest saved = leaveRequestRepository.save(request);
+        try {
+            if (employee.getManager() != null && employee.getManager().getEmail() != null) {
+                emailOutboxService.sendLeaveAppliedNotification(
+                        employee.getManager().getEmail(),
+                        employee.getManager().getFirstName() + " " + employee.getManager().getLastName(),
+                        employee.getName(),
+                        saved.getLeaveType(),
+                        saved.getStartDate().toString(),
+                        saved.getEndDate().toString(),
+                        saved.getReason()
+                );
+            }
+        } catch (Exception ex) {
+            log.warn("[Leave Application] Failed to enqueue manager notification: {}", ex.getMessage());
+        }
+        return saved;
     }
 
 
@@ -412,14 +429,44 @@ public class LeaveService {
             ));
         }
 
+        try {
+            if (targetEmployee != null && targetEmployee.getEmail() != null) {
+                emailOutboxService.sendLeaveDecisionNotification(
+                        targetEmployee.getEmail(),
+                        targetEmployee.getName(),
+                        saved.getLeaveType(),
+                        saved.getStartDate().toString(),
+                        saved.getEndDate().toString(),
+                        saved.getStatus(),
+                        rejectionReason
+                );
+            }
+        } catch (Exception ex) {
+            log.warn("[Leave Decision] Failed to enqueue employee decision email: {}", ex.getMessage());
+        }
+
         return saved;
+    }
+
+    private java.util.Map<Long, Employee> getEmployeesMapForRequests(List<LeaveRequest> requests) {
+        if (requests == null || requests.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.Set<Long> empIds = requests.stream()
+                .flatMap(req -> java.util.stream.Stream.of(req.getEmployeeId(), req.getApprovedBy()))
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (empIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        return employeeRepository.findAllById(empIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
     }
 
     @Transactional(readOnly = true)
     public List<LeaveRequestDto> getLeavesByEmployeeDto(Long employeeId) {
         List<LeaveRequest> requests = leaveRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId);
-        java.util.Map<Long, Employee> empMap = employeeRepository.findAll().stream()
-                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
+        java.util.Map<Long, Employee> empMap = getEmployeesMapForRequests(requests);
         return requests.stream().map(req -> mapToDto(req, empMap)).toList();
     }
 
@@ -431,16 +478,14 @@ public class LeaveService {
     @Transactional(readOnly = true)
     public List<LeaveRequestDto> getPendingForManager(Long managerId) {
         List<LeaveRequest> requests = leaveRequestRepository.findPendingForManager(managerId);
-        java.util.Map<Long, Employee> empMap = employeeRepository.findAll().stream()
-                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
+        java.util.Map<Long, Employee> empMap = getEmployeesMapForRequests(requests);
         return requests.stream().map(req -> mapToDto(req, empMap)).toList();
     }
 
     @Transactional(readOnly = true)
     public List<LeaveRequestDto> getAllPendingRequests() {
         List<LeaveRequest> requests = leaveRequestRepository.findByStatusOrderByCreatedAtDesc("PENDING");
-        java.util.Map<Long, Employee> empMap = employeeRepository.findAll().stream()
-                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
+        java.util.Map<Long, Employee> empMap = getEmployeesMapForRequests(requests);
         return requests.stream().map(req -> mapToDto(req, empMap)).toList();
     }
 
@@ -494,13 +539,19 @@ public class LeaveService {
         List<Employee> employees = employeeRepository.findAll();
         List<Long> exclusions = (excludedEmployeeIds != null) ? excludedEmployeeIds : List.of();
 
+        java.util.Map<Long, LeaveBalance> existingBalances = leaveBalanceRepository.findByYear(currentYear).stream()
+                .collect(java.util.stream.Collectors.toMap(LeaveBalance::getEmployeeId, b -> b, (b1, b2) -> b1));
+
         List<LeaveBalance> balancesToSave = new ArrayList<>();
         for (Employee emp : employees) {
             if (exclusions.contains(emp.getId())) {
                 log.info("Skipping bulk leave grant for excluded employee: {} (ID: {})", emp.getFirstName() + " " + emp.getLastName(), emp.getId());
                 continue;
             }
-            LeaveBalance balance = getOrCreateLeaveBalance(emp.getId(), currentYear);
+            LeaveBalance balance = existingBalances.get(emp.getId());
+            if (balance == null) {
+                balance = getOrCreateLeaveBalance(emp.getId(), currentYear);
+            }
             switch (leaveType.toUpperCase()) {
                 case "SICK" -> balance.setSickLeaveQuota(balance.getSickLeaveQuota() + grantDays);
                 case "EARNED" -> balance.setEarnedLeaveQuota(balance.getEarnedLeaveQuota() + grantDays);

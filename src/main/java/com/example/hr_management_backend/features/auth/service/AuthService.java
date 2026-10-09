@@ -11,5 +11,8 @@ public interface AuthService {
     User getCurrentUser(String email);
     User updateUserRole(Long userId, String newRole);
     void logout(String token);
+    void forgotPassword(String email);
+    void resetPassword(String email, String token, String newPassword);
+    String activateAccount(String activationKey, String newPassword);
 }
 

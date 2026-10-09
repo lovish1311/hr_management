@@ -34,6 +34,7 @@ public class LeavePolicyAndCancellationTest {
     private EmployeeRepository employeeRepository;
 
     private Employee testEmployee;
+    private Employee hrManager;
 
     @BeforeEach
     void setUp() {
@@ -46,6 +47,17 @@ public class LeavePolicyAndCancellationTest {
                     .email("lovish.test@company.com")
                     .department("Engineering")
                     .role("EMPLOYEE")
+                    .build();
+            return employeeRepository.save(emp);
+        });
+
+        hrManager = employeeRepository.findByEmail("hr.test@company.com").orElseGet(() -> {
+            Employee emp = Employee.builder()
+                    .firstName("HR")
+                    .lastName("Manager")
+                    .email("hr.test@company.com")
+                    .department("HR")
+                    .role("HR")
                     .build();
             return employeeRepository.save(emp);
         });
@@ -105,7 +117,7 @@ public class LeavePolicyAndCancellationTest {
         LeaveRequest saved = leaveService.applyForLeave(request);
 
         // Manager approves
-        LeaveRequest approved = leaveService.updateStatus(saved.getId(), "APPROVED", null, 1L);
+        LeaveRequest approved = leaveService.updateStatus(saved.getId(), "APPROVED", null, hrManager.getId());
         assertEquals("APPROVED", approved.getStatus());
 
         LeaveBalance balanceAfterApprove = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), LocalDate.now().getYear());

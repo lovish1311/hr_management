@@ -58,5 +58,26 @@ public class AuthController {
         authService.logout(token);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@Valid @RequestBody com.example.hr_management_backend.features.auth.dto.ForgotPasswordRequest request) {
+        authService.forgotPassword(request.getEmail());
+        return ResponseEntity.ok(java.util.Map.of("message", "If an account exists for that email, a verification code has been dispatched."));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody com.example.hr_management_backend.features.auth.dto.ResetPasswordRequest request) {
+        authService.resetPassword(request.getEmail(), request.getToken(), request.getNewPassword());
+        return ResponseEntity.ok(java.util.Map.of("message", "Password has been successfully updated."));
+    }
+
+    @PostMapping("/activate")
+    public ResponseEntity<?> activateAccount(@Valid @RequestBody com.example.hr_management_backend.features.auth.dto.ActivateAccountRequest request) {
+        String email = authService.activateAccount(request.getActivationKey(), request.getNewPassword());
+        return ResponseEntity.ok(java.util.Map.of(
+                "email", email,
+                "message", "Account successfully activated! You may now sign in."
+        ));
+    }
 }
 

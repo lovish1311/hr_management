@@ -133,5 +133,12 @@ public class EmployeeController {
         employeeService.deleteEmployee(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PostMapping("/{id}/send-credentials")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
+    public ResponseEntity<java.util.Map<String, String>> sendCredentials(@PathVariable Long id) {
+        employeeService.sendCredentials(id);
+        return ResponseEntity.ok(java.util.Map.of("message", "Credentials and activation key successfully dispatched."));
+    }
 }
 

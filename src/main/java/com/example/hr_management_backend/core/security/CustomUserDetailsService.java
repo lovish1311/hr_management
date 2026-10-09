@@ -26,8 +26,9 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
+        String cleanEmail = email != null ? email.trim().toLowerCase() : "";
+        User user = userRepository.findByEmail(cleanEmail)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + cleanEmail));
 
         java.util.Set<String> authorityNames = new java.util.LinkedHashSet<>();
 

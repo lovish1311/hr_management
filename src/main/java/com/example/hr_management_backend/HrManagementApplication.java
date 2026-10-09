@@ -14,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 public class HrManagementApplication {
 
     public static void main(String[] args) {
+        com.example.hr_management_backend.core.config.DotenvLoader.load();
         SpringApplication.run(HrManagementApplication.class, args);
     }
 

@@ -26,9 +26,13 @@ public class JwtUtils {
 
     public String generateJwtToken(Authentication authentication) {
         UserDetails userPrincipal = (UserDetails) authentication.getPrincipal();
+        java.util.List<String> authorities = authentication.getAuthorities().stream()
+                .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                .toList();
 
         return Jwts.builder()
                 .subject(userPrincipal.getUsername())
+                .claim("authorities", authorities)
                 .issuedAt(new Date())
                 .expiration(new Date((new Date()).getTime() + jwtExpirationMs))
                 .signWith(key(), Jwts.SIG.HS256)
@@ -51,6 +55,22 @@ public class JwtUtils {
                 .parseSignedClaims(token)
                 .getPayload()
                 .getSubject();
+    }
+
+    @SuppressWarnings("unchecked")
+    public java.util.List<String> getAuthoritiesFromJwtToken(String token) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(key())
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+            Object authObj = claims.get("authorities");
+            if (authObj instanceof java.util.List<?> list) {
+                return list.stream().map(Object::toString).toList();
+            }
+        } catch (Exception ignored) {}
+        return java.util.List.of();
     }
 
     public boolean validateJwtToken(String authToken) {
