@@ -21,6 +21,7 @@ import java.util.Map;
 public class LeaveController {
 
     private final LeaveService leaveService;
+    private final com.example.hr_management_backend.features.leaves.service.LeaveCarryoverService leaveCarryoverService;
 
     @PostMapping("/apply")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
@@ -151,6 +152,24 @@ public class LeaveController {
     public ResponseEntity<Map<String, String>> clearEmployeeLeaveData(@PathVariable Long employeeId) {
         leaveService.clearEmployeeLeaveData(employeeId);
         return ResponseEntity.ok(Map.of("message", "All leave requests, permissions, short breaks, and balance reset successfully for employee ID " + employeeId));
+    }
+
+    @PostMapping("/admin/trigger-carryover")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
+    public ResponseEntity<Map<String, Object>> triggerYearEndCarryover(
+            @RequestParam(required = false) Integer fromYear,
+            @RequestParam(required = false) Integer toYear) {
+        int targetToYear = (toYear != null) ? toYear : java.time.LocalDate.now().getYear();
+        int targetFromYear = (fromYear != null) ? fromYear : targetToYear - 1;
+        return ResponseEntity.ok(leaveCarryoverService.processYearEndCarryover(targetFromYear, targetToYear));
+    }
+
+    @PostMapping("/admin/trigger-expiry")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
+    public ResponseEntity<Map<String, Object>> triggerCarriedForwardExpiry(
+            @RequestParam(required = false) Integer year) {
+        int targetYear = (year != null) ? year : java.time.LocalDate.now().getYear();
+        return ResponseEntity.ok(leaveCarryoverService.processCarriedForwardExpiry(targetYear));
     }
 }
 

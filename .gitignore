@@ -46,3 +46,5 @@ application-local.yml
 /chats/
 /playwright_screenshots/
 test_edge_e2e_suite.py
+hs_err_pid*.log
+replay_pid*.log
