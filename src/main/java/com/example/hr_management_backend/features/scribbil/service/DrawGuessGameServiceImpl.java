@@ -14,9 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -31,8 +33,21 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
     private final WordDictionaryService wordDictionaryService;
     private final EmployeeRepository employeeRepository;
     private final DrawGuessWebSocketSessionManager sessionManager;
+    private final DrawGuessScoringEngine scoringEngine;
 
-    private final ScheduledExecutorService gameScheduler = Executors.newScheduledThreadPool(4);
+    private static final int SCHEDULER_CORE_POOL_SIZE = Math.max(8, Runtime.getRuntime().availableProcessors() * 2);
+    private final ScheduledExecutorService gameScheduler = Executors.newScheduledThreadPool(
+            SCHEDULER_CORE_POOL_SIZE,
+            new ThreadFactory() {
+                private final java.util.concurrent.atomic.AtomicInteger counter = new java.util.concurrent.atomic.AtomicInteger(1);
+                @Override
+                public Thread newThread(Runnable r) {
+                    Thread t = new Thread(r, "draw-guess-scheduler-" + counter.getAndIncrement());
+                    t.setDaemon(true);
+                    return t;
+                }
+            }
+    );
 
     // In-Memory Active Room Runtime State
     private final Map<String, ActiveRoomRuntime> activeRooms = new ConcurrentHashMap<>();
@@ -159,10 +174,8 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
         DrawGuessRoom room = roomRepository.findByRoomCode(code)
                 .orElseThrow(() -> new IllegalArgumentException("Room not found: " + code));
 
-        List<DrawGuessPlayerDto> players = playerRepository.findByRoomCodeOrderByTurnOrderAsc(code)
-                .stream()
-                .map(this::mapToPlayerDto)
-                .toList();
+        List<DrawGuessPlayerDto> players = mapToPlayerDtosWithRanks(
+                playerRepository.findByRoomCodeOrderByTurnOrderAsc(code));
 
         return mapToRoomResponse(room, players);
     }
@@ -181,6 +194,11 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             throw new org.springframework.security.access.AccessDeniedException("Only the room host can start the game.");
         }
 
+        if (room.getState() != DrawGuessGameState.LOBBY) {
+            log.warn("Room {} is already in state {}, ignoring duplicate startGame request", code, room.getState());
+            return;
+        }
+
         List<DrawGuessPlayer> players = playerRepository.findByRoomCodeOrderByTurnOrderAsc(code);
         if (players.size() < 2) {
             throw new IllegalStateException("Minimum 2 players required to start Draw & Guess game.");
@@ -196,8 +214,8 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             p.setTurnScore(0);
             p.setHasGuessedCorrectly(false);
             p.setIsDrawer(false);
-            playerRepository.save(p);
         }
+        playerRepository.saveAll(shuffled);
 
         room.setState(DrawGuessGameState.STARTING);
         room.setCurrentRound(1);
@@ -207,14 +225,103 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
         ActiveRoomRuntime runtime = activeRooms.computeIfAbsent(code, ActiveRoomRuntime::new);
         runtime.resetForNewGame(room.getMaxRounds());
 
+        // Generate 45 words using Gemini AI (with fallback) asynchronously for this game session
+        List<String> gameWords = wordDictionaryService.generateWordsForGame(room.getCategory(), 45);
+        runtime.initWordPool(gameWords);
+        log.info("Initialized room {} with {} words in pool for category '{}'", code, gameWords.size(), room.getCategory());
+
         sessionManager.broadcast(code, Map.of(
                 "type", "GAME_STARTING",
                 "roomCode", code,
                 "totalRounds", room.getMaxRounds(),
-                "players", players.stream().map(this::mapToPlayerDto).toList()
+                "players", mapToPlayerDtosWithRanks(shuffled)
         ));
 
         // Start first turn after 2-second brief countdown
+        gameScheduler.schedule(() -> initiateTurn(code), 2, TimeUnit.SECONDS);
+    }
+
+    @Override
+    @Transactional
+    public void restartGame(String roomCode, RestartDrawGuessRoomRequest request, String employeeEmail) {
+        String code = roomCode.trim().toUpperCase();
+        DrawGuessRoom room = roomRepository.findByRoomCode(code)
+                .orElseThrow(() -> new IllegalArgumentException("Room not found: " + code));
+
+        Employee actor = employeeRepository.findByEmail(employeeEmail)
+                .orElseThrow(() -> new IllegalArgumentException("Actor not found: " + employeeEmail));
+
+        if (!actor.getId().equals(room.getHostEmployeeId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the room host can restart the game.");
+        }
+
+        if (request != null) {
+            if (request.getMaxRounds() != null) {
+                room.setMaxRounds(Math.max(1, Math.min(10, request.getMaxRounds())));
+            }
+            if (request.getDrawTimeSeconds() != null) {
+                room.setDrawTimeSeconds(Math.max(30, Math.min(180, request.getDrawTimeSeconds())));
+            }
+            if (request.getWordChoiceCount() != null) {
+                room.setWordChoiceCount(Math.max(2, Math.min(5, request.getWordChoiceCount())));
+            }
+            if (request.getCategory() != null && !request.getCategory().isBlank()) {
+                room.setCategory(request.getCategory().trim().toUpperCase());
+            }
+            if (request.getCustomWordsOnly() != null) {
+                room.setCustomWordsOnly(request.getCustomWordsOnly());
+            }
+        }
+
+        List<DrawGuessPlayer> players = playerRepository.findByRoomCodeOrderByTurnOrderAsc(code);
+        if (players.size() < 2) {
+            throw new IllegalStateException("Minimum 2 players required to restart Draw & Guess game.");
+        }
+
+        // Shuffle turn order and reset per-game scores
+        List<DrawGuessPlayer> shuffled = new ArrayList<>(players);
+        Collections.shuffle(shuffled);
+        for (int i = 0; i < shuffled.size(); i++) {
+            DrawGuessPlayer p = shuffled.get(i);
+            p.setTurnOrder(i);
+            p.setScore(0);
+            p.setTurnScore(0);
+            p.setHasGuessedCorrectly(false);
+            p.setIsDrawer(false);
+        }
+        playerRepository.saveAll(shuffled);
+
+        room.setState(DrawGuessGameState.STARTING);
+        room.setCurrentRound(1);
+        room.setCurrentTurnIndex(0);
+        room.setActiveDrawerEmployeeId(null);
+        room.setCurrentWord(null);
+        room.setCurrentHint(null);
+        roomRepository.save(room);
+
+        ActiveRoomRuntime runtime = activeRooms.computeIfAbsent(code, ActiveRoomRuntime::new);
+        runtime.resetForNewGame(room.getMaxRounds());
+
+        // Generate new word pool for selected category
+        List<String> gameWords = wordDictionaryService.generateWordsForGame(room.getCategory(), 45);
+        runtime.initWordPool(gameWords);
+        log.info("Restarted room {} with {} words in pool for category '{}'", code, gameWords.size(), room.getCategory());
+
+        // Broadcast clear canvas and restart event
+        sessionManager.broadcast(code, Map.of(
+                "type", "CLEAR_CANVAS",
+                "roomCode", code
+        ));
+
+        sessionManager.broadcast(code, Map.of(
+                "type", "GAME_RESTARTED",
+                "roomCode", code,
+                "totalRounds", room.getMaxRounds(),
+                "drawTimeSeconds", room.getDrawTimeSeconds(),
+                "category", room.getCategory(),
+                "players", mapToPlayerDtosWithRanks(shuffled)
+        ));
+
         gameScheduler.schedule(() -> initiateTurn(code), 2, TimeUnit.SECONDS);
     }
 
@@ -226,20 +333,17 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                 return;
             }
 
-            List<DrawGuessPlayer> players = playerRepository.findByRoomCodeOrderByTurnOrderAsc(roomCode)
-                    .stream()
-                    .filter(DrawGuessPlayer::getIsConnected)
-                    .toList();
-
-            if (players.isEmpty()) {
+            List<DrawGuessPlayer> allPlayers = playerRepository.findByRoomCodeOrderByTurnOrderAsc(roomCode);
+            if (allPlayers.isEmpty()) {
                 room.setState(DrawGuessGameState.CANCELLED);
                 roomRepository.save(room);
                 sessionManager.broadcast(roomCode, Map.of("type", "GAME_CANCELLED", "reason", "All players disconnected"));
                 return;
             }
 
+            // Determine active drawer using turn order across all registered players
             int turnIndex = room.getCurrentTurnIndex();
-            if (turnIndex >= players.size()) {
+            if (turnIndex >= allPlayers.size()) {
                 // Next round
                 int nextRound = room.getCurrentRound() + 1;
                 if (nextRound > room.getMaxRounds()) {
@@ -251,15 +355,15 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                 turnIndex = 0;
             }
 
-            DrawGuessPlayer drawer = players.get(turnIndex);
+            DrawGuessPlayer drawer = allPlayers.get(turnIndex);
 
             // Reset player turn states
-            for (DrawGuessPlayer p : players) {
+            for (DrawGuessPlayer p : allPlayers) {
                 p.setIsDrawer(p.getId().equals(drawer.getId()));
                 p.setHasGuessedCorrectly(false);
                 p.setTurnScore(0);
-                playerRepository.save(p);
             }
+            playerRepository.saveAll(allPlayers);
 
             room.setState(DrawGuessGameState.WORD_SELECTION);
             room.setActiveDrawerEmployeeId(drawer.getEmployeeId());
@@ -268,17 +372,42 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             room.setTurnExpiresAt(LocalDateTime.now().plusSeconds(15));
             roomRepository.save(room);
 
-            // Fetch word choices
-            List<WordOptionDto> wordOptions = wordDictionaryService.getRandomWordOptions(room.getCategory(), room.getWordChoiceCount());
-
             ActiveRoomRuntime runtime = activeRooms.computeIfAbsent(roomCode, ActiveRoomRuntime::new);
-            runtime.startWordSelection(drawer.getEmployeeId(), wordOptions);
+
+            // Select 3 random word options from room's remaining word pool
+            List<WordOptionDto> wordOptions = new ArrayList<>();
+            List<String> pool = runtime.getRemainingWordPool();
+            if (pool.size() < room.getWordChoiceCount()) {
+                // Top up pool from dictionary if exhausted
+                List<String> extra = wordDictionaryService.getFallbackWords(room.getCategory(), 30);
+                runtime.initWordPool(extra);
+                pool = runtime.getRemainingWordPool();
+            }
+
+            List<String> candidatePool = new ArrayList<>(pool);
+            Collections.shuffle(candidatePool);
+            int choiceCount = Math.min(room.getWordChoiceCount(), candidatePool.size());
+            for (int i = 0; i < choiceCount; i++) {
+                String w = candidatePool.get(i);
+                wordOptions.add(WordOptionDto.builder()
+                        .word(w)
+                        .category(room.getCategory())
+                        .difficulty("MEDIUM")
+                        .hint("")
+                        .build());
+            }
+
+            List<WordOptionDto> finalWordOptions = wordOptions.isEmpty()
+                    ? wordDictionaryService.getRandomWordOptions(room.getCategory(), room.getWordChoiceCount())
+                    : wordOptions;
+
+            runtime.startWordSelection(drawer.getEmployeeId(), finalWordOptions);
 
             // Send private word options to drawer
             sessionManager.sendToUser(roomCode, drawer.getEmployeeId(), Map.of(
                     "type", "WORD_OPTIONS",
                     "roomCode", roomCode,
-                    "options", wordOptions,
+                    "options", finalWordOptions,
                     "selectionTimeSeconds", 15
             ));
 
@@ -291,7 +420,7 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                     "currentRound", room.getCurrentRound(),
                     "maxRounds", room.getMaxRounds(),
                     "turnIndex", turnIndex + 1,
-                    "totalTurnsInRound", players.size(),
+                    "totalTurnsInRound", allPlayers.size(),
                     "selectionTimeSeconds", 15
             ));
 
@@ -300,7 +429,7 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                 try {
                     ActiveRoomRuntime r = activeRooms.get(roomCode);
                     if (r != null && r.isAwaitingWordSelection()) {
-                        String autoWord = wordOptions.get(0).getWord();
+                        String autoWord = finalWordOptions.get(0).getWord();
                         log.info("Auto-selecting word '{}' for timed-out drawer in room {}", autoWord, roomCode);
                         executeWordSelection(roomCode, autoWord, drawer.getEmployeeId());
                     }
@@ -338,9 +467,15 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
 
         ActiveRoomRuntime runtime = activeRooms.computeIfAbsent(roomCode, ActiveRoomRuntime::new);
         runtime.cancelAutoPickTask();
+        runtime.cancelDrawerDisconnectGraceTask();
+        runtime.cancelHintTasks();
+        runtime.getIsConcludingTurn().set(false);
 
         String word = selectedWord.trim();
         String initialHint = generateMaskedHint(word, Collections.emptySet());
+
+        // Evict chosen word from room's word pool so it is not repeated
+        runtime.removeWordFromPool(word);
 
         room.setState(DrawGuessGameState.DRAWING);
         room.setCurrentWord(word);
@@ -349,6 +484,13 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
         roomRepository.save(room);
 
         runtime.startDrawing(word, room.getDrawTimeSeconds());
+        runtime.setTurnStartedAt(Instant.now());
+
+        // Broadcast explicit CLEAR_CANVAS to wipe all clients clean
+        sessionManager.broadcast(roomCode, Map.of(
+                "type", "CLEAR_CANVAS",
+                "roomCode", roomCode
+        ));
 
         // Broadcast DRAWING_STARTED
         Map<String, Object> drawingEvent = Map.of(
@@ -358,6 +500,8 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                 "wordLength", word.length(),
                 "hintPattern", initialHint,
                 "drawTimeSeconds", room.getDrawTimeSeconds(),
+                "turnStartedAtEpochMs", runtime.getTurnStartedAt().toEpochMilli(),
+                "turnExpiresAtEpochMs", runtime.getTurnStartedAt().toEpochMilli() + (room.getDrawTimeSeconds() * 1000L),
                 "currentRound", room.getCurrentRound(),
                 "maxRounds", room.getMaxRounds()
         );
@@ -370,13 +514,15 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                 "word", word
         ));
 
-        // Schedule Hint 1 (at 50% remaining time)
-        long hint1Delay = room.getDrawTimeSeconds() / 2;
-        gameScheduler.schedule(() -> revealHint(roomCode, 1), hint1Delay, TimeUnit.SECONDS);
+        // Schedule progressive hints at 30%, 60%, 80% elapsed time
+        int totalSec = room.getDrawTimeSeconds();
+        long hint1Delay = Math.max(1, (long) (totalSec * 0.30));
+        long hint2Delay = Math.max(2, (long) (totalSec * 0.60));
+        long hint3Delay = Math.max(3, (long) (totalSec * 0.80));
 
-        // Schedule Hint 2 (at 25% remaining time)
-        long hint2Delay = (long) (room.getDrawTimeSeconds() * 0.75);
-        gameScheduler.schedule(() -> revealHint(roomCode, 2), hint2Delay, TimeUnit.SECONDS);
+        runtime.addHintTask(gameScheduler.schedule(() -> revealHint(roomCode, 1), hint1Delay, TimeUnit.SECONDS));
+        runtime.addHintTask(gameScheduler.schedule(() -> revealHint(roomCode, 2), hint2Delay, TimeUnit.SECONDS));
+        runtime.addHintTask(gameScheduler.schedule(() -> revealHint(roomCode, 3), hint3Delay, TimeUnit.SECONDS));
 
         // Schedule Turn Timeout
         ScheduledFuture<?> timeoutTask = gameScheduler.schedule(() -> concludeTurn(roomCode, false),
@@ -429,18 +575,20 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
 
     @Override
     public void handleStroke(DrawStrokeDto stroke, String employeeEmail) {
-        String code = stroke.getRoomCode().trim().toUpperCase();
-        DrawGuessRoom room = roomRepository.findByRoomCode(code).orElse(null);
-        if (room == null || room.getState() != DrawGuessGameState.DRAWING) return;
-
         Employee emp = employeeEmail != null ? employeeRepository.findByEmail(employeeEmail).orElse(null) : null;
-        if (emp != null && !emp.getId().equals(room.getActiveDrawerEmployeeId())) {
-            log.warn("Blocked non-drawer empId={} from submitting stroke in room {}", emp.getId(), code);
+        handleStroke(stroke, emp != null ? emp.getId() : null);
+    }
+
+    @Override
+    public void handleStroke(DrawStrokeDto stroke, Long employeeId) {
+        String code = stroke.getRoomCode().trim().toUpperCase();
+        ActiveRoomRuntime runtime = activeRooms.get(code);
+        if (runtime == null || !runtime.isDrawingActive()) return;
+
+        if (employeeId != null && !employeeId.equals(runtime.getActiveDrawerId())) {
+            log.warn("Blocked non-drawer empId={} from submitting stroke in room {}", employeeId, code);
             return;
         }
-
-        ActiveRoomRuntime runtime = activeRooms.get(code);
-        if (runtime == null) return;
 
         runtime.addStroke(stroke);
 
@@ -454,40 +602,51 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
 
     @Override
     public void clearCanvas(String roomCode, String employeeEmail) {
-        String code = roomCode.trim().toUpperCase();
-        DrawGuessRoom room = roomRepository.findByRoomCode(code).orElse(null);
-        if (room == null || room.getState() != DrawGuessGameState.DRAWING) return;
-
         Employee emp = employeeEmail != null ? employeeRepository.findByEmail(employeeEmail).orElse(null) : null;
-        if (emp != null && !emp.getId().equals(room.getActiveDrawerEmployeeId())) {
-            log.warn("Blocked non-drawer empId={} from clearing canvas in room {}", emp.getId(), code);
+        clearCanvas(roomCode, emp != null ? emp.getId() : null);
+    }
+
+    @Override
+    public void clearCanvas(String roomCode, Long employeeId) {
+        String code = roomCode.trim().toUpperCase();
+        ActiveRoomRuntime runtime = activeRooms.get(code);
+        if (runtime == null || !runtime.isDrawingActive()) return;
+
+        if (employeeId != null && !employeeId.equals(runtime.getActiveDrawerId())) {
+            log.warn("Blocked non-drawer empId={} from clearing canvas in room {}", employeeId, code);
             return;
         }
 
-        ActiveRoomRuntime runtime = activeRooms.get(code);
-        if (runtime != null) {
-            runtime.clearCanvas();
-        }
+        runtime.clearCanvas();
         sessionManager.broadcast(code, Map.of("type", "CLEAR_CANVAS", "roomCode", code));
     }
 
     @Override
     public void undoStroke(String roomCode, String employeeEmail) {
-        String code = roomCode.trim().toUpperCase();
-        DrawGuessRoom room = roomRepository.findByRoomCode(code).orElse(null);
-        if (room == null || room.getState() != DrawGuessGameState.DRAWING) return;
-
         Employee emp = employeeEmail != null ? employeeRepository.findByEmail(employeeEmail).orElse(null) : null;
-        if (emp != null && !emp.getId().equals(room.getActiveDrawerEmployeeId())) {
-            log.warn("Blocked non-drawer empId={} from undoing stroke in room {}", emp.getId(), code);
+        undoStroke(roomCode, emp != null ? emp.getId() : null);
+    }
+
+    @Override
+    public void undoStroke(String roomCode, Long employeeId) {
+        String code = roomCode.trim().toUpperCase();
+        ActiveRoomRuntime runtime = activeRooms.get(code);
+        if (runtime == null || !runtime.isDrawingActive()) return;
+
+        if (employeeId != null && !employeeId.equals(runtime.getActiveDrawerId())) {
+            log.warn("Blocked non-drawer empId={} from undoing stroke in room {}", employeeId, code);
             return;
         }
 
-        ActiveRoomRuntime runtime = activeRooms.get(code);
-        if (runtime != null) {
-            runtime.undoLastStroke();
+        String undoneStrokeId = runtime.undoLastStroke();
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("type", "UNDO_STROKE");
+        payload.put("roomCode", code);
+        if (undoneStrokeId != null) {
+            payload.put("strokeId", undoneStrokeId);
         }
-        sessionManager.broadcast(code, Map.of("type", "UNDO_STROKE", "roomCode", code));
+        sessionManager.broadcast(code, payload);
     }
 
     @Override
@@ -558,18 +717,21 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
 
         if (normalizedGuess.equals(normalizedSecret)) {
             // Correct Guess!
-            int remainingSeconds = calculateRemainingSeconds(room.getTurnExpiresAt());
-            int totalSeconds = room.getDrawTimeSeconds();
-            boolean isFirstCorrect = runtime != null && runtime.getCorrectGuessers().isEmpty();
-
-            int points = 100 + (int) Math.round(400.0 * ((double) Math.max(1, remainingSeconds) / (double) totalSeconds));
-            if (isFirstCorrect) {
-                points += 100; // First-guess bonus
+            Instant turnStart = runtime != null ? runtime.getTurnStartedAt() : null;
+            double elapsedSeconds = 0.0;
+            if (turnStart != null) {
+                long elapsedMs = Duration.between(turnStart, Instant.now()).toMillis();
+                elapsedSeconds = Math.max(0.0, elapsedMs / 1000.0);
+            } else {
+                int remainingSeconds = calculateRemainingSeconds(room.getTurnExpiresAt());
+                elapsedSeconds = Math.max(0.0, (double) (room.getDrawTimeSeconds() - remainingSeconds));
             }
+
+            int points = scoringEngine.calculateGuessScore(elapsedSeconds, (double) room.getDrawTimeSeconds());
 
             player.setHasGuessedCorrectly(true);
             player.setTurnScore(points);
-            player.setScore(player.getScore() + points);
+            // Cumulative player.score remains frozen mid-round! Points are committed only upon concludeTurn().
             playerRepository.save(player);
 
             if (runtime != null) {
@@ -583,11 +745,11 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                     .employeeName(player.getEmployeeName())
                     .pointsAwarded(points)
                     .isDrawerPoints(false)
-                    .timeTakenSeconds((double) (totalSeconds - remainingSeconds))
+                    .timeTakenSeconds(elapsedSeconds)
                     .build();
             scoreRepository.save(scoreRecord);
 
-            // Broadcast GUESS_CORRECT (hide the actual word text in chat for other guessers)
+            // Broadcast GUESS_CORRECT (notice: totalScore remains frozen at cumulative player.getScore())
             sessionManager.broadcast(code, Map.of(
                     "type", "GUESS_CORRECT",
                     "roomCode", code,
@@ -606,7 +768,7 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
 
             boolean allGuessed = activeGuessers.stream().allMatch(p -> Boolean.TRUE.equals(p.getHasGuessedCorrectly()));
             if (allGuessed && !activeGuessers.isEmpty()) {
-                log.info("All guessers have solved word '{}' in room {}. Ending turn early.", secretWord, code);
+                log.info("All active guessers have solved word '{}' in room {}. Ending turn early.", secretWord, code);
                 concludeTurn(code, true);
             }
 
@@ -666,37 +828,65 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             }
 
             if (runtime != null) {
+                if (!runtime.getIsConcludingTurn().compareAndSet(false, true)) {
+                    log.info("Turn in room {} is already concluding. Skipping duplicate trigger.", roomCode);
+                    return;
+                }
                 runtime.cancelTurnTimeoutTask();
+                runtime.cancelHintTasks();
+                runtime.cancelDrawerDisconnectGraceTask();
             }
 
             String secretWord = runtime != null ? runtime.getActiveWord() : room.getCurrentWord();
             Long drawerId = room.getActiveDrawerEmployeeId();
 
-            DrawGuessPlayer drawer = playerRepository.findByRoomCodeAndEmployeeId(roomCode, drawerId).orElse(null);
-
-            // Compute drawer points based on successful guesses
+            // Compute drawer points based on 50% of total guesser scores using scoring engine
             int drawerPoints = 0;
             if (runtime != null && !runtime.getGuesserPoints().isEmpty()) {
-                double avgGuesserPoints = runtime.getGuesserPoints().values().stream()
-                        .mapToInt(Integer::intValue)
-                        .average()
-                        .orElse(0.0);
-                drawerPoints = (int) Math.round(avgGuesserPoints * 0.75);
+                drawerPoints = scoringEngine.calculateDrawerScore(runtime.getGuesserPoints().values(), DrawGuessScoringEngine.DEFAULT_DRAWER_SHARE);
             }
 
-            if (drawer != null && drawerPoints > 0) {
+            DrawGuessPlayer drawer = playerRepository.findByRoomCodeAndEmployeeId(roomCode, drawerId).orElse(null);
+            if (drawer != null) {
                 drawer.setTurnScore(drawerPoints);
                 drawer.setScore(drawer.getScore() + drawerPoints);
                 playerRepository.save(drawer);
 
-                scoreRepository.save(DrawGuessScore.builder()
-                        .roomCode(roomCode)
-                        .employeeId(drawerId)
-                        .employeeName(drawer.getEmployeeName())
-                        .pointsAwarded(drawerPoints)
-                        .isDrawerPoints(true)
-                        .build());
+                if (drawerPoints > 0) {
+                    scoreRepository.save(DrawGuessScore.builder()
+                            .roomCode(roomCode)
+                            .employeeId(drawerId)
+                            .employeeName(drawer.getEmployeeName())
+                            .pointsAwarded(drawerPoints)
+                            .isDrawerPoints(true)
+                            .build());
+                }
             }
+
+            // Commit guesser turn points to cumulative totals
+            List<DrawGuessPlayer> allPlayers = playerRepository.findByRoomCodeOrderByTurnOrderAsc(roomCode);
+            for (DrawGuessPlayer p : allPlayers) {
+                if (!p.getEmployeeId().equals(drawerId)) {
+                    int turnPoints = p.getTurnScore() != null ? p.getTurnScore() : 0;
+                    p.setScore(p.getScore() + turnPoints);
+                }
+            }
+
+            // Determine authoritative leaderboard ranks: sorted by score DESC, turnOrder ASC
+            List<DrawGuessPlayer> rankedPlayers = new ArrayList<>(allPlayers);
+            rankedPlayers.sort((a, b) -> {
+                int cmp = Integer.compare(b.getScore(), a.getScore());
+                if (cmp != 0) return cmp;
+                return Integer.compare(a.getTurnOrder(), b.getTurnOrder());
+            });
+
+            Map<Long, Integer> rankMap = new HashMap<>();
+            for (int i = 0; i < rankedPlayers.size(); i++) {
+                rankMap.put(rankedPlayers.get(i).getEmployeeId(), i + 1);
+            }
+
+            // Batch update all players
+            playerRepository.saveAll(allPlayers);
 
             // Save round record
             DrawGuessRound roundRecord = DrawGuessRound.builder()
@@ -716,13 +906,13 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             room.setState(DrawGuessGameState.ROUND_RESULT);
             roomRepository.save(room);
 
-            List<DrawGuessPlayer> allPlayers = playerRepository.findByRoomCodeOrderByTurnOrderAsc(roomCode);
             List<RoundResultDto.PlayerScoreDelta> scoreDeltas = allPlayers.stream()
                     .map(p -> RoundResultDto.PlayerScoreDelta.builder()
                             .employeeId(p.getEmployeeId())
                             .employeeName(p.getEmployeeName())
                             .pointsEarned(p.getTurnScore())
                             .totalScore(p.getScore())
+                            .rank(rankMap.getOrDefault(p.getEmployeeId(), 1))
                             .guessedCorrectly(p.getHasGuessedCorrectly())
                             .build())
                     .toList();
@@ -739,11 +929,20 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                     .nextTurnInSeconds(6)
                     .build();
 
-            // Broadcast ROUND_ENDED with secret word reveal
+            // Broadcast ROUND_ENDED with secret word reveal and finalized leaderboard
+            List<DrawGuessPlayerDto> playerDtos = allPlayers.stream()
+                    .map(p -> {
+                        DrawGuessPlayerDto dto = mapToPlayerDto(p);
+                        dto.setRank(rankMap.getOrDefault(p.getEmployeeId(), 1));
+                        return dto;
+                    })
+                    .toList();
+
             sessionManager.broadcast(roomCode, Map.of(
                     "type", "ROUND_ENDED",
                     "roomCode", roomCode,
-                    "result", roundResult
+                    "result", roundResult,
+                    "players", playerDtos
             ));
 
             // Advance turn index
@@ -765,7 +964,20 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             if (room == null) return;
 
             room.setState(DrawGuessGameState.FINAL_RESULTS);
+            room.setActiveDrawerEmployeeId(null);
+            room.setCurrentWord(null);
+            room.setCurrentHint(null);
             roomRepository.save(room);
+
+            ActiveRoomRuntime runtime = activeRooms.get(roomCode);
+            if (runtime != null) {
+                runtime.concludeGame();
+            }
+
+            sessionManager.broadcast(roomCode, Map.of(
+                    "type", "CLEAR_CANVAS",
+                    "roomCode", roomCode
+            ));
 
             List<DrawGuessPlayer> players = playerRepository.findByRoomCodeOrderByTurnOrderAsc(roomCode);
             players.sort((a, b) -> Integer.compare(b.getScore(), a.getScore()));
@@ -861,10 +1073,8 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             p.setIsConnected(false);
             playerRepository.save(p);
 
-            List<DrawGuessPlayerDto> playerDtos = playerRepository.findByRoomCodeOrderByTurnOrderAsc(code)
-                    .stream()
-                    .map(this::mapToPlayerDto)
-                    .toList();
+            List<DrawGuessPlayerDto> playerDtos = mapToPlayerDtosWithRanks(
+                    playerRepository.findByRoomCodeOrderByTurnOrderAsc(code));
 
             sessionManager.broadcast(code, Map.of(
                     "type", "PLAYER_DISCONNECTED",
@@ -900,29 +1110,102 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             // Drawer disconnected during active drawing / word selection
             if (employeeId.equals(room.getActiveDrawerEmployeeId())
                     && (room.getState() == DrawGuessGameState.DRAWING || room.getState() == DrawGuessGameState.WORD_SELECTION)) {
-                log.info("Active drawer {} disconnected in room {}. Ending turn.", employeeId, code);
-                sessionManager.broadcast(code, Map.of(
-                        "type", "DRAWER_DISCONNECTED",
-                        "roomCode", code,
-                        "message", "Drawer disconnected. Advancing to next turn..."
-                ));
-                gameScheduler.schedule(() -> concludeTurn(code, false), 2, TimeUnit.SECONDS);
+                log.info("Active drawer {} disconnected in room {}. Starting 10-second grace period.", employeeId, code);
+                ActiveRoomRuntime runtime = activeRooms.get(code);
+                if (runtime != null) {
+                    sessionManager.broadcast(code, Map.of(
+                            "type", "DRAWER_DISCONNECTED",
+                            "roomCode", code,
+                            "message", "Drawer disconnected. Waiting 10s for reconnect..."
+                    ));
+                    ScheduledFuture<?> grace = gameScheduler.schedule(() -> {
+                        try {
+                            DrawGuessRoom currentRoom = roomRepository.findByRoomCode(code).orElse(null);
+                            if (currentRoom == null) return;
+
+                            boolean stillDisconnected = playerRepository.findByRoomCodeAndEmployeeId(code, employeeId)
+                                    .map(pl -> !Boolean.TRUE.equals(pl.getIsConnected()))
+                                    .orElse(true);
+
+                            if (!stillDisconnected) {
+                                log.info("Drawer empId {} reconnected before grace expired in room {}", employeeId, code);
+                                return;
+                            }
+
+                            log.info("Drawer reconnect grace expired for empId {} in room {}. State: {}", employeeId, code, currentRoom.getState());
+
+                            if (currentRoom.getState() == DrawGuessGameState.WORD_SELECTION) {
+                                skipTurnDueToDrawerDisconnect(code, employeeId);
+                            } else if (currentRoom.getState() == DrawGuessGameState.DRAWING) {
+                                concludeTurn(code, false);
+                            }
+                        } catch (Exception e) {
+                            log.error("Error executing drawer disconnect grace expiry in room {}: {}", code, e.getMessage(), e);
+                        }
+                    }, 10, TimeUnit.SECONDS);
+                    runtime.setDrawerDisconnectGraceTask(grace);
+                }
             }
         });
+    }
+
+    @Transactional
+    public synchronized void skipTurnDueToDrawerDisconnect(String roomCode, Long disconnectedDrawerId) {
+        try {
+            DrawGuessRoom room = roomRepository.findByRoomCode(roomCode).orElse(null);
+            if (room == null || room.getState() == DrawGuessGameState.COMPLETED || room.getState() == DrawGuessGameState.CANCELLED) {
+                return;
+            }
+
+            ActiveRoomRuntime runtime = activeRooms.get(roomCode);
+            if (runtime != null) {
+                runtime.cancelAutoPickTask();
+                runtime.cancelTurnTimeoutTask();
+                runtime.cancelHintTasks();
+                runtime.cancelDrawerDisconnectGraceTask();
+                runtime.getIsConcludingTurn().set(false);
+            }
+
+            log.info("Skipping turn in room {} due to disconnected drawer empId={}", roomCode, disconnectedDrawerId);
+
+            sessionManager.broadcast(roomCode, Map.of(
+                    "type", "TURN_SKIPPED",
+                    "roomCode", roomCode,
+                    "reason", "Active drawer disconnected. Advancing to next turn.",
+                    "nextTurnInSeconds", 4
+            ));
+
+            room.setState(DrawGuessGameState.ROUND_RESULT);
+            room.setCurrentTurnIndex(room.getCurrentTurnIndex() + 1);
+            room.setCurrentWord(null);
+            room.setCurrentHint(null);
+            room.setActiveDrawerEmployeeId(null);
+            roomRepository.save(room);
+
+            gameScheduler.schedule(() -> initiateTurn(roomCode), 4, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.error("Failed to skip turn for room {}: {}", roomCode, e.getMessage(), e);
+        }
     }
 
     @Override
     @Transactional
     public void handlePlayerReconnect(String roomCode, Long employeeId) {
         String code = roomCode.trim().toUpperCase();
+        ActiveRoomRuntime runtime = activeRooms.get(code);
+        if (runtime != null) {
+            runtime.cancelDrawerDisconnectGraceTask();
+        }
+
+        DrawGuessRoom room = roomRepository.findByRoomCode(code).orElse(null);
+        if (room == null) return;
+
         playerRepository.findByRoomCodeAndEmployeeId(code, employeeId).ifPresent(p -> {
             p.setIsConnected(true);
             playerRepository.save(p);
 
-            List<DrawGuessPlayerDto> playerDtos = playerRepository.findByRoomCodeOrderByTurnOrderAsc(code)
-                    .stream()
-                    .map(this::mapToPlayerDto)
-                    .toList();
+            List<DrawGuessPlayerDto> playerDtos = mapToPlayerDtosWithRanks(
+                    playerRepository.findByRoomCodeOrderByTurnOrderAsc(code));
 
             sessionManager.broadcast(code, Map.of(
                     "type", "PLAYER_RECONNECTED",
@@ -932,7 +1215,53 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                     "player", mapToPlayerDto(p),
                     "players", playerDtos
             ));
+
+            // Authoritative state push for reconnecting client
+            // 1. If active drawer during DRAWING: restore secret word
+            if (employeeId.equals(room.getActiveDrawerEmployeeId()) && room.getState() == DrawGuessGameState.DRAWING) {
+                String word = runtime != null && runtime.getActiveWord() != null ? runtime.getActiveWord() : room.getCurrentWord();
+                if (word != null) {
+                    sessionManager.sendToUser(code, employeeId, Map.of(
+                            "type", "SECRET_WORD_REVEAL",
+                            "roomCode", code,
+                            "word", word
+                    ));
+                }
+            }
+
+            // 2. If active drawer during WORD_SELECTION: restore word options
+            if (employeeId.equals(room.getActiveDrawerEmployeeId()) && room.getState() == DrawGuessGameState.WORD_SELECTION) {
+                List<WordOptionDto> options = runtime != null ? runtime.getWordOptions() : Collections.emptyList();
+                if (!options.isEmpty()) {
+                    sessionManager.sendToUser(code, employeeId, Map.of(
+                            "type", "WORD_OPTIONS",
+                            "roomCode", code,
+                            "options", options,
+                            "selectionTimeSeconds", calculateRemainingSeconds(room.getTurnExpiresAt())
+                    ));
+                }
+            }
+
+            // 3. If guesser already guessed correctly: restore secret word reveal
+            if (!employeeId.equals(room.getActiveDrawerEmployeeId())
+                    && Boolean.TRUE.equals(p.getHasGuessedCorrectly())
+                    && room.getState() == DrawGuessGameState.DRAWING) {
+                String word = runtime != null && runtime.getActiveWord() != null ? runtime.getActiveWord() : room.getCurrentWord();
+                if (word != null) {
+                    sessionManager.sendToUser(code, employeeId, Map.of(
+                            "type", "SECRET_WORD_REVEAL",
+                            "roomCode", code,
+                            "word", word
+                    ));
+                }
+            }
         });
+    }
+
+    @Override
+    public List<DrawStrokeDto> getCanvasHistory(String roomCode) {
+        ActiveRoomRuntime runtime = activeRooms.get(roomCode.trim().toUpperCase());
+        return runtime != null ? new ArrayList<>(runtime.getCanvasHistory()) : Collections.emptyList();
     }
 
     @PreDestroy
@@ -1035,6 +1364,24 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
                 .build();
     }
 
+    private List<DrawGuessPlayerDto> mapToPlayerDtosWithRanks(List<DrawGuessPlayer> players) {
+        List<DrawGuessPlayer> sorted = new ArrayList<>(players);
+        sorted.sort((a, b) -> {
+            int cmp = Integer.compare(b.getScore(), a.getScore());
+            if (cmp != 0) return cmp;
+            return Integer.compare(a.getTurnOrder(), b.getTurnOrder());
+        });
+        Map<Long, Integer> rankMap = new HashMap<>();
+        for (int i = 0; i < sorted.size(); i++) {
+            rankMap.put(sorted.get(i).getEmployeeId(), i + 1);
+        }
+        return players.stream().map(p -> {
+            DrawGuessPlayerDto dto = mapToPlayerDto(p);
+            dto.setRank(rankMap.getOrDefault(p.getEmployeeId(), 1));
+            return dto;
+        }).toList();
+    }
+
     // --- Active Room Runtime Memory Container ---
 
     private static class ActiveRoomRuntime {
@@ -1042,6 +1389,7 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
         private String activeWord;
         private Long activeDrawerId;
         private List<WordOptionDto> wordOptions = new CopyOnWriteArrayList<>();
+        private final List<String> remainingWordPool = new CopyOnWriteArrayList<>();
         private final Set<Integer> revealedIndices = ConcurrentHashMap.newKeySet();
         private final Set<Long> correctGuessers = ConcurrentHashMap.newKeySet();
         private final Map<Long, Integer> guesserPoints = new ConcurrentHashMap<>();
@@ -1049,8 +1397,31 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
         private ScheduledFuture<?> autoPickTask;
         private ScheduledFuture<?> turnTimeoutTask;
 
+        private Instant turnStartedAt;
+        private final AtomicBoolean isConcludingTurn = new AtomicBoolean(false);
+        private ScheduledFuture<?> drawerDisconnectGraceTask;
+        private final Map<Long, Instant> guessTimestamps = new ConcurrentHashMap<>();
+        private final List<ScheduledFuture<?>> hintTasks = new CopyOnWriteArrayList<>();
+
         public ActiveRoomRuntime(String roomCode) {
             this.roomCode = roomCode;
+        }
+
+        public void initWordPool(List<String> words) {
+            this.remainingWordPool.clear();
+            if (words != null) {
+                this.remainingWordPool.addAll(words);
+            }
+        }
+
+        public List<String> getRemainingWordPool() {
+            return remainingWordPool;
+        }
+
+        public void removeWordFromPool(String chosenWord) {
+            if (chosenWord != null) {
+                remainingWordPool.removeIf(w -> w.equalsIgnoreCase(chosenWord.trim()));
+            }
         }
 
         public void resetForNewGame(int maxRounds) {
@@ -1061,8 +1432,16 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             this.correctGuessers.clear();
             this.guesserPoints.clear();
             this.canvasHistory.clear();
+            this.guessTimestamps.clear();
+            this.isConcludingTurn.set(false);
             cancelAutoPickTask();
             cancelTurnTimeoutTask();
+            cancelDrawerDisconnectGraceTask();
+            cancelHintTasks();
+        }
+
+        public void concludeGame() {
+            resetForNewGame(0);
         }
 
         public void startWordSelection(Long drawerId, List<WordOptionDto> options) {
@@ -1073,8 +1452,12 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             this.correctGuessers.clear();
             this.guesserPoints.clear();
             this.canvasHistory.clear();
+            this.guessTimestamps.clear();
+            this.isConcludingTurn.set(false);
             cancelAutoPickTask();
             cancelTurnTimeoutTask();
+            cancelDrawerDisconnectGraceTask();
+            cancelHintTasks();
         }
 
         public void startDrawing(String word, int drawTimeSeconds) {
@@ -1084,7 +1467,19 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             this.correctGuessers.clear();
             this.guesserPoints.clear();
             this.canvasHistory.clear();
+            this.guessTimestamps.clear();
+            this.isConcludingTurn.set(false);
             cancelAutoPickTask();
+            cancelDrawerDisconnectGraceTask();
+            cancelHintTasks();
+        }
+
+        public Long getActiveDrawerId() {
+            return activeDrawerId;
+        }
+
+        public boolean isDrawingActive() {
+            return activeWord != null;
         }
 
         public void addStroke(DrawStrokeDto stroke) {
@@ -1098,15 +1493,23 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             canvasHistory.clear();
         }
 
-        public void undoLastStroke() {
-            if (!canvasHistory.isEmpty()) {
+        public String undoLastStroke() {
+            if (canvasHistory.isEmpty()) return null;
+            DrawStrokeDto last = canvasHistory.get(canvasHistory.size() - 1);
+            String lastId = last.getStrokeId();
+            if (lastId != null && !lastId.isBlank()) {
+                canvasHistory.removeIf(s -> lastId.equals(s.getStrokeId()));
+                return lastId;
+            } else {
                 canvasHistory.remove(canvasHistory.size() - 1);
+                return null;
             }
         }
 
         public void recordCorrectGuess(Long empId, int points) {
             correctGuessers.add(empId);
             guesserPoints.put(empId, points);
+            guessTimestamps.put(empId, Instant.now());
         }
 
         public boolean isAwaitingWordSelection() {
@@ -1125,6 +1528,30 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
             }
         }
 
+        public void cancelDrawerDisconnectGraceTask() {
+            if (drawerDisconnectGraceTask != null && !drawerDisconnectGraceTask.isDone()) {
+                drawerDisconnectGraceTask.cancel(true);
+            }
+        }
+
+        public void setDrawerDisconnectGraceTask(ScheduledFuture<?> task) {
+            cancelDrawerDisconnectGraceTask();
+            this.drawerDisconnectGraceTask = task;
+        }
+
+        public void cancelHintTasks() {
+            for (ScheduledFuture<?> task : hintTasks) {
+                if (task != null && !task.isDone()) {
+                    task.cancel(true);
+                }
+            }
+            hintTasks.clear();
+        }
+
+        public void addHintTask(ScheduledFuture<?> task) {
+            hintTasks.add(task);
+        }
+
         public String getActiveWord() { return activeWord; }
         public List<WordOptionDto> getWordOptions() { return wordOptions; }
         public Set<Integer> getRevealedIndices() { return revealedIndices; }
@@ -1133,5 +1560,9 @@ public class DrawGuessGameServiceImpl implements DrawGuessGameService {
         public List<DrawStrokeDto> getCanvasHistory() { return canvasHistory; }
         public void setAutoPickTask(ScheduledFuture<?> task) { this.autoPickTask = task; }
         public void setTurnTimeoutTask(ScheduledFuture<?> task) { this.turnTimeoutTask = task; }
+        public Instant getTurnStartedAt() { return turnStartedAt; }
+        public void setTurnStartedAt(Instant turnStartedAt) { this.turnStartedAt = turnStartedAt; }
+        public AtomicBoolean getIsConcludingTurn() { return isConcludingTurn; }
+        public Map<Long, Instant> getGuessTimestamps() { return guessTimestamps; }
     }
 }

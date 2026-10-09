@@ -6,7 +6,9 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+    @Index(name = "idx_user_emp_id", columnList = "employeeId")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -25,6 +27,10 @@ public class User {
 
     @Column(nullable = false)
     private String role;
+
+    @Builder.Default
+    @Column(name = "system_role", nullable = false, columnDefinition = "VARCHAR(255) DEFAULT 'NONE'")
+    private String systemRole = "NONE"; // NONE, ADMIN, SUPER_ADMIN
 
     private Long employeeId;
 

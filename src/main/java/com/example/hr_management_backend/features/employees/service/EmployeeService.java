@@ -18,5 +18,6 @@ public interface EmployeeService {
     EmployeeDetailDto updatePermissions(Long employeeId, Boolean isAttendanceTracked, String lateArrivalAllowedUntil, String earlyOutAllowedAfter, Boolean hasTambolaAccess);
     EmployeeDetailDto elevateRoleAndPermissions(Long employeeId, com.example.hr_management_backend.features.employees.dto.ElevateEmployeeDto dto, String actorEmail);
     void deleteEmployee(Long id);
+    void sendCredentials(Long employeeId);
 }
 

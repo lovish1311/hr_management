@@ -24,5 +24,6 @@ public class DrawGuessPlayerDto {
     private Boolean isHost;
     private Boolean isConnected;
     private Integer turnOrder;
+    private Integer rank;
     private LocalDateTime joinedAt;
 }

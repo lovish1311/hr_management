@@ -43,6 +43,10 @@ public class LeaveService {
     private final com.example.hr_management_backend.features.leaves.policy.LeavePolicyEngine leavePolicyEngine;
     private final com.example.hr_management_backend.features.employees.repository.EmployeeAuthorityRepository employeeAuthorityRepository;
     private final com.example.hr_management_backend.features.auth.repository.UserRepository userRepository;
+    private final com.example.hr_management_backend.features.email.service.EmailOutboxService emailOutboxService;
+    private final LeaveAccrualService leaveAccrualService;
+    private final LeaveCarryoverService leaveCarryoverService;
+
     private String capturePolicySnapshot() {
         try {
             String mode = settingsService.getSetting("time_off_policy_mode");
@@ -68,8 +72,9 @@ public class LeaveService {
 
     /**
      * Fetches or creates a leave balance for the given employee and year.
-     * Computes real-time pending leave requests to ensure `getCasualLeaveRemaining()`
-     * dynamically decrements immediately when a leave application is submitted.
+     * Computes real-time pending leave requests to ensure remaining balances
+     * dynamically decrement immediately when a leave application is submitted.
+     * Integrates pro-rata accrual for mid-year joiners and carryover from previous year.
      */
     @Transactional
     public LeaveBalance getOrCreateLeaveBalance(Long employeeId, Integer year) {
@@ -83,36 +88,158 @@ public class LeaveService {
                         }
                     } catch (Exception ignored) {}
 
+                    LocalDate expiryDate = LocalDate.of(year, 3, 31);
+                    boolean isExpired = LocalDate.now().isAfter(expiryDate);
+
                     LeaveBalance initial = LeaveBalance.builder()
                             .employeeId(employeeId)
                             .year(year)
-                            .casualLeaveQuota(6.0)
                             .casualLeaveUsed(0.0)
-                            .sickLeaveQuota(6.0)
                             .sickLeaveUsed(0.0)
-                            .earnedLeaveQuota(6.0)
                             .earnedLeaveUsed(0.0)
                             .workFromHomeQuota(0.0)
                             .workFromHomeUsed(0.0)
-                            .restrictedHolidayQuota(defaultRhQuota)
                             .restrictedHolidayUsed(0.0)
+                            .carriedForwardLeaveQuota(0.0)
+                            .carriedForwardLeaveUsed(0.0)
+                            .carriedForwardExpiryDate(expiryDate)
+                            .carriedForwardExpired(isExpired)
                             .build();
+
+                    Employee emp = employeeRepository.findById(employeeId).orElse(null);
+                    leaveAccrualService.applyAccrualToBalance(initial, emp, year, defaultRhQuota);
+
+                    // Check if previous year has unused Earned Leave eligible for carry forward
+                    if (year > 2020) {
+                        leaveBalanceRepository.findByEmployeeIdAndYear(employeeId, year - 1).ifPresent(prev -> {
+                            double unusedEarned = Math.max(0.0,
+                                    (prev.getEarnedLeaveQuota() != null ? prev.getEarnedLeaveQuota() : 6.0)
+                                            - (prev.getEarnedLeaveUsed() != null ? prev.getEarnedLeaveUsed() : 0.0));
+                            if (unusedEarned > 0.0) {
+                                double carryover = Math.min(LeaveCarryoverService.MAX_EARNED_LEAVE_CARRYOVER_DAYS, unusedEarned);
+                                initial.setCarriedForwardLeaveQuota(carryover);
+                                log.info("Auto-carried forward {} days of Earned Leave for employeeId={} from year {} into year {}",
+                                        carryover, employeeId, year - 1, year);
+                            }
+                        });
+                    }
+
                     return leaveBalanceRepository.save(initial);
                 });
 
-        Double pendingCasual = leaveRequestRepository.sumPendingLeaves(employeeId, "CASUAL", year);
-        Double pendingSick = leaveRequestRepository.sumPendingLeaves(employeeId, "SICK", year);
-        Double pendingEarned = leaveRequestRepository.sumPendingLeaves(employeeId, "EARNED", year);
-        Double pendingWfh = leaveRequestRepository.sumPendingLeaves(employeeId, "WORK_FROM_HOME", year);
-        Double pendingRh = leaveRequestRepository.sumPendingLeaves(employeeId, "RESTRICTED_HOLIDAY", year);
+        Employee emp = employeeRepository.findById(employeeId).orElse(null);
+        leaveCarryoverService.checkAndApplyLazyCarryoverAndExpiry(balance, emp, year);
 
-        balance.setCasualLeavePending(pendingCasual != null ? pendingCasual : 0.0);
-        balance.setSickLeavePending(pendingSick != null ? pendingSick : 0.0);
-        balance.setEarnedLeavePending(pendingEarned != null ? pendingEarned : 0.0);
-        balance.setWorkFromHomePending(pendingWfh != null ? pendingWfh : 0.0);
-        balance.setRestrictedHolidayPending(pendingRh != null ? pendingRh : 0.0);
+        // Single-trip aggregation query: fetch all pending sums grouped by type in 1 trip
+        java.util.Map<String, Double> pendingMap = new java.util.HashMap<>();
+        for (Object[] row : leaveRequestRepository.sumPendingLeavesGroupedByType(employeeId, year)) {
+            if (row != null && row.length >= 2 && row[0] != null && row[1] != null) {
+                String type = ((String) row[0]).toUpperCase().replace("_LEAVE", "");
+                Double val = ((Number) row[1]).doubleValue();
+                pendingMap.put(type, val);
+            }
+        }
+
+        balance.setCasualLeavePending(pendingMap.getOrDefault("CASUAL", 0.0));
+        balance.setSickLeavePending(pendingMap.getOrDefault("SICK", 0.0));
+        balance.setEarnedLeavePending(pendingMap.getOrDefault("EARNED", 0.0));
+        balance.setWorkFromHomePending(pendingMap.getOrDefault("WORK_FROM_HOME", 0.0));
+        balance.setRestrictedHolidayPending(pendingMap.getOrDefault("RESTRICTED_HOLIDAY", 0.0));
 
         return balance;
+    }
+
+    /**
+     * Deducts Earned Leave with priority. If leave dates fall strictly after March 31st (expiry date),
+     * carried-forward leaves cannot be availed and deductions come exclusively from the current year quota.
+     * Otherwise, unexpired carried-forward balance is deducted first (FIFO), and the remainder from the current year.
+     */
+    public void deductEarnedLeaveWithPriority(LeaveBalance balance, double daysToDeduct) {
+        deductEarnedLeaveWithPriority(balance, daysToDeduct, null, null);
+    }
+
+    public void deductEarnedLeaveWithPriority(LeaveBalance balance, double daysToDeduct, LocalDate startDate, LocalDate endDate) {
+        if (daysToDeduct <= 0) return;
+
+        LocalDate expiryDate = balance.getEffectiveCarriedForwardExpiryDate();
+        boolean strictlyAfterExpiry = (startDate != null && startDate.isAfter(expiryDate));
+
+        if (strictlyAfterExpiry) {
+            // Leave dates are strictly after March 31: cannot consume carried forward leaves!
+            if (balance.getCurrentYearEarnedLeaveRemaining() < daysToDeduct) {
+                throw new IllegalStateException("Cannot approve: Insufficient current year earned leave balance for dates after March 31st.");
+            }
+            balance.setEarnedLeaveUsed((balance.getEarnedLeaveUsed() != null ? balance.getEarnedLeaveUsed() : 0.0) + daysToDeduct);
+            log.info("Deducted Earned Leave strictly from current year (post-expiry dates {} to {}): {} days for employeeId={}",
+                    startDate, endDate, daysToDeduct, balance.getEmployeeId());
+            return;
+        }
+
+        if (balance.getEarnedLeaveRemaining() < daysToDeduct) {
+            throw new IllegalStateException("Cannot approve: Insufficient earned leave balance.");
+        }
+
+        double carriedRemaining = balance.getCarriedForwardLeaveRemaining();
+        if (carriedRemaining > 0) {
+            double deductFromCarried = Math.min(daysToDeduct, carriedRemaining);
+            balance.setCarriedForwardLeaveUsed((balance.getCarriedForwardLeaveUsed() != null ? balance.getCarriedForwardLeaveUsed() : 0.0) + deductFromCarried);
+            double remainder = daysToDeduct - deductFromCarried;
+            if (remainder > 0) {
+                balance.setEarnedLeaveUsed((balance.getEarnedLeaveUsed() != null ? balance.getEarnedLeaveUsed() : 0.0) + remainder);
+            }
+            log.info("Deducted Earned Leave with priority: {} from carried-forward, {} from current year for employeeId={}",
+                    deductFromCarried, remainder, balance.getEmployeeId());
+        } else {
+            balance.setEarnedLeaveUsed((balance.getEarnedLeaveUsed() != null ? balance.getEarnedLeaveUsed() : 0.0) + daysToDeduct);
+            log.info("Deducted Earned Leave: {} from current year for employeeId={}", daysToDeduct, balance.getEmployeeId());
+        }
+    }
+
+    /**
+     * Refunds Earned Leave.
+     * If carried forward is expired, refunds go to current year first to prevent valid days from lapsing into an expired bucket.
+     * If carried forward is active (before March 31), refunds restore carried forward balance first so employees can utilize them before expiry.
+     */
+    public void refundEarnedLeaveWithPriority(LeaveBalance balance, double daysToRefund) {
+        if (daysToRefund <= 0) return;
+
+        boolean isExpired = balance.isCarriedForwardCurrentlyExpired();
+
+        if (isExpired) {
+            // Carried forward has expired: refund current year first
+            double currentYearUsed = balance.getEarnedLeaveUsed() != null ? balance.getEarnedLeaveUsed() : 0.0;
+            if (currentYearUsed > 0) {
+                double refundToCurrent = Math.min(daysToRefund, currentYearUsed);
+                balance.setEarnedLeaveUsed(Math.max(0.0, currentYearUsed - refundToCurrent));
+                double remainderRefund = daysToRefund - refundToCurrent;
+                if (remainderRefund > 0) {
+                    double carriedUsed = balance.getCarriedForwardLeaveUsed() != null ? balance.getCarriedForwardLeaveUsed() : 0.0;
+                    balance.setCarriedForwardLeaveUsed(Math.max(0.0, carriedUsed - remainderRefund));
+                }
+                log.info("Refunded Earned Leave (expired CF): {} to current year, {} to carried-forward for employeeId={}",
+                        refundToCurrent, remainderRefund, balance.getEmployeeId());
+            } else {
+                double carriedUsed = balance.getCarriedForwardLeaveUsed() != null ? balance.getCarriedForwardLeaveUsed() : 0.0;
+                balance.setCarriedForwardLeaveUsed(Math.max(0.0, carriedUsed - daysToRefund));
+                log.info("Refunded Earned Leave (expired CF): {} to carried-forward for employeeId={}", daysToRefund, balance.getEmployeeId());
+            }
+        } else {
+            // Carried forward is unexpired: restore carried forward first so employee can still use it before March 31st
+            double carriedUsed = balance.getCarriedForwardLeaveUsed() != null ? balance.getCarriedForwardLeaveUsed() : 0.0;
+            if (carriedUsed > 0) {
+                double refundToCarried = Math.min(daysToRefund, carriedUsed);
+                balance.setCarriedForwardLeaveUsed(Math.max(0.0, carriedUsed - refundToCarried));
+                double remainderRefund = daysToRefund - refundToCarried;
+                if (remainderRefund > 0) {
+                    balance.setEarnedLeaveUsed(Math.max(0.0, (balance.getEarnedLeaveUsed() != null ? balance.getEarnedLeaveUsed() : 0.0) - remainderRefund));
+                }
+                log.info("Refunded Earned Leave (active CF): {} to carried-forward, {} to current year for employeeId={}",
+                        refundToCarried, remainderRefund, balance.getEmployeeId());
+            } else {
+                balance.setEarnedLeaveUsed(Math.max(0.0, (balance.getEarnedLeaveUsed() != null ? balance.getEarnedLeaveUsed() : 0.0) - daysToRefund));
+                log.info("Refunded Earned Leave (active CF): {} to current year for employeeId={}", daysToRefund, balance.getEmployeeId());
+            }
+        }
     }
 
     @Transactional
@@ -202,7 +329,15 @@ public class LeaveService {
                     String normType = reqType.replaceAll("_LEAVE$", "");
                     remaining = switch (normType) {
                         case "SICK" -> balance.getSickLeaveRemaining();
-                        case "EARNED" -> balance.getEarnedLeaveRemaining();
+                        case "EARNED" -> {
+                            // If leave dates fall strictly after March 31st, carried forward leaves cannot be used
+                            LocalDate expiry = balance.getEffectiveCarriedForwardExpiryDate();
+                            if (request.getStartDate().isAfter(expiry)) {
+                                yield balance.getCurrentYearEarnedLeaveRemaining();
+                            } else {
+                                yield balance.getEarnedLeaveRemaining();
+                            }
+                        }
                         case "WORK_FROM_HOME", "WFH" -> 999.0;
                         case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.getRestrictedHolidayRemaining();
                         default -> balance.getCasualLeaveRemaining();
@@ -225,7 +360,23 @@ public class LeaveService {
             validateTimeBasedPolicy(request, type);
         }
 
-        return leaveRequestRepository.save(request);
+        LeaveRequest saved = leaveRequestRepository.save(request);
+        try {
+            if (employee.getManager() != null && employee.getManager().getEmail() != null) {
+                emailOutboxService.sendLeaveAppliedNotification(
+                        employee.getManager().getEmail(),
+                        employee.getManager().getFirstName() + " " + employee.getManager().getLastName(),
+                        employee.getName(),
+                        saved.getLeaveType(),
+                        saved.getStartDate().toString(),
+                        saved.getEndDate().toString(),
+                        saved.getReason()
+                );
+            }
+        } catch (Exception ex) {
+            log.warn("[Leave Application] Failed to enqueue manager notification: {}", ex.getMessage());
+        }
+        return saved;
     }
 
 
@@ -272,7 +423,11 @@ public class LeaveService {
                 var userOpt = userRepository.findByEmail(actorEmail);
                 isSysAdmin = userOpt.isPresent() && (
                         "SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole()) ||
-                        "ROLE_SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole())
+                        "ROLE_SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole()) ||
+                        "ADMIN".equalsIgnoreCase(userOpt.get().getRole()) ||
+                        "ROLE_ADMIN".equalsIgnoreCase(userOpt.get().getRole()) ||
+                        "ADMIN".equalsIgnoreCase(userOpt.get().getSystemRole()) ||
+                        "SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getSystemRole())
                 );
             }
             if (!isSysAdmin) {
@@ -287,6 +442,8 @@ public class LeaveService {
 
             boolean isAuthorized = "HR".equalsIgnoreCase(actor.getRole())
                     || "SUPER_ADMIN".equalsIgnoreCase(actor.getRole())
+                    || "ADMIN".equalsIgnoreCase(actor.getSystemRole())
+                    || "SUPER_ADMIN".equalsIgnoreCase(actor.getSystemRole())
                     || employeeAuthorityRepository.existsByEmployeeIdAndAuthority(actor.getId(), "LEAVE_APPROVE_ALL");
 
             if (!isAuthorized && targetEmployee.getManager() != null) {
@@ -330,12 +487,7 @@ public class LeaveService {
                         }
                         balance.setSickLeaveUsed(balance.getSickLeaveUsed() + requestedDays);
                     }
-                    case "EARNED" -> {
-                        if (balance.getEarnedLeaveRemaining() < requestedDays) {
-                            throw new IllegalStateException("Cannot approve: Insufficient earned leave balance.");
-                        }
-                        balance.setEarnedLeaveUsed(balance.getEarnedLeaveUsed() + requestedDays);
-                    }
+                    case "EARNED" -> deductEarnedLeaveWithPriority(balance, requestedDays, request.getStartDate(), request.getEndDate());
                     case "WORK_FROM_HOME", "WFH" -> {
                         balance.setWorkFromHomeUsed(balance.getWorkFromHomeUsed() + requestedDays);
                     }
@@ -372,7 +524,7 @@ public class LeaveService {
                     String normType = reqType.replaceAll("_LEAVE$", "");
                     switch (normType) {
                         case "SICK" -> balance.setSickLeaveUsed(Math.max(0.0, balance.getSickLeaveUsed() - requestedDays));
-                        case "EARNED" -> balance.setEarnedLeaveUsed(Math.max(0.0, balance.getEarnedLeaveUsed() - requestedDays));
+                        case "EARNED" -> refundEarnedLeaveWithPriority(balance, requestedDays);
                         case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0.0, balance.getWorkFromHomeUsed() - requestedDays));
                         case "UNPAID" -> log.info("Unpaid leave rejected — no balance change for employeeId={}", request.getEmployeeId());
                         case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.setRestrictedHolidayUsed(Math.max(0.0, balance.getRestrictedHolidayUsed() - requestedDays));
@@ -402,14 +554,44 @@ public class LeaveService {
             ));
         }
 
+        try {
+            if (targetEmployee != null && targetEmployee.getEmail() != null) {
+                emailOutboxService.sendLeaveDecisionNotification(
+                        targetEmployee.getEmail(),
+                        targetEmployee.getName(),
+                        saved.getLeaveType(),
+                        saved.getStartDate().toString(),
+                        saved.getEndDate().toString(),
+                        saved.getStatus(),
+                        rejectionReason
+                );
+            }
+        } catch (Exception ex) {
+            log.warn("[Leave Decision] Failed to enqueue employee decision email: {}", ex.getMessage());
+        }
+
         return saved;
+    }
+
+    private java.util.Map<Long, Employee> getEmployeesMapForRequests(List<LeaveRequest> requests) {
+        if (requests == null || requests.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        java.util.Set<Long> empIds = requests.stream()
+                .flatMap(req -> java.util.stream.Stream.of(req.getEmployeeId(), req.getApprovedBy()))
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (empIds.isEmpty()) {
+            return java.util.Collections.emptyMap();
+        }
+        return employeeRepository.findAllById(empIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
     }
 
     @Transactional(readOnly = true)
     public List<LeaveRequestDto> getLeavesByEmployeeDto(Long employeeId) {
         List<LeaveRequest> requests = leaveRequestRepository.findByEmployeeIdOrderByCreatedAtDesc(employeeId);
-        java.util.Map<Long, Employee> empMap = employeeRepository.findAll().stream()
-                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
+        java.util.Map<Long, Employee> empMap = getEmployeesMapForRequests(requests);
         return requests.stream().map(req -> mapToDto(req, empMap)).toList();
     }
 
@@ -421,16 +603,14 @@ public class LeaveService {
     @Transactional(readOnly = true)
     public List<LeaveRequestDto> getPendingForManager(Long managerId) {
         List<LeaveRequest> requests = leaveRequestRepository.findPendingForManager(managerId);
-        java.util.Map<Long, Employee> empMap = employeeRepository.findAll().stream()
-                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
+        java.util.Map<Long, Employee> empMap = getEmployeesMapForRequests(requests);
         return requests.stream().map(req -> mapToDto(req, empMap)).toList();
     }
 
     @Transactional(readOnly = true)
     public List<LeaveRequestDto> getAllPendingRequests() {
         List<LeaveRequest> requests = leaveRequestRepository.findByStatusOrderByCreatedAtDesc("PENDING");
-        java.util.Map<Long, Employee> empMap = employeeRepository.findAll().stream()
-                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (e1, e2) -> e1));
+        java.util.Map<Long, Employee> empMap = getEmployeesMapForRequests(requests);
         return requests.stream().map(req -> mapToDto(req, empMap)).toList();
     }
 
@@ -484,13 +664,19 @@ public class LeaveService {
         List<Employee> employees = employeeRepository.findAll();
         List<Long> exclusions = (excludedEmployeeIds != null) ? excludedEmployeeIds : List.of();
 
+        java.util.Map<Long, LeaveBalance> existingBalances = leaveBalanceRepository.findByYear(currentYear).stream()
+                .collect(java.util.stream.Collectors.toMap(LeaveBalance::getEmployeeId, b -> b, (b1, b2) -> b1));
+
         List<LeaveBalance> balancesToSave = new ArrayList<>();
         for (Employee emp : employees) {
             if (exclusions.contains(emp.getId())) {
                 log.info("Skipping bulk leave grant for excluded employee: {} (ID: {})", emp.getFirstName() + " " + emp.getLastName(), emp.getId());
                 continue;
             }
-            LeaveBalance balance = getOrCreateLeaveBalance(emp.getId(), currentYear);
+            LeaveBalance balance = existingBalances.get(emp.getId());
+            if (balance == null) {
+                balance = getOrCreateLeaveBalance(emp.getId(), currentYear);
+            }
             switch (leaveType.toUpperCase()) {
                 case "SICK" -> balance.setSickLeaveQuota(balance.getSickLeaveQuota() + grantDays);
                 case "EARNED" -> balance.setEarnedLeaveQuota(balance.getEarnedLeaveQuota() + grantDays);
@@ -552,12 +738,7 @@ public class LeaveService {
                     }
                     balance.setSickLeaveUsed(balance.getSickLeaveUsed() + daysToApply);
                 }
-                case "EARNED" -> {
-                    if (balance.getEarnedLeaveRemaining() < daysToApply) {
-                        throw new IllegalStateException("Cannot apply: Insufficient earned leave balance for employee.");
-                    }
-                    balance.setEarnedLeaveUsed(balance.getEarnedLeaveUsed() + daysToApply);
-                }
+                case "EARNED" -> deductEarnedLeaveWithPriority(balance, daysToApply, request.getStartDate(), request.getEndDate());
                 case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(balance.getWorkFromHomeUsed() + daysToApply);
                 case "UNPAID" -> log.info("Unpaid leave applied on behalf for employeeId={}", request.getEmployeeId());
                 default -> {
@@ -624,7 +805,7 @@ public class LeaveService {
                     String normType = type.replaceAll("_LEAVE$", "");
                     switch (normType) {
                         case "SICK" -> balance.setSickLeaveUsed(Math.max(0, balance.getSickLeaveUsed() - daysToCredit));
-                        case "EARNED" -> balance.setEarnedLeaveUsed(Math.max(0, balance.getEarnedLeaveUsed() - daysToCredit));
+                        case "EARNED" -> refundEarnedLeaveWithPriority(balance, daysToCredit);
                         case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0, balance.getWorkFromHomeUsed() - daysToCredit));
                         case "UNPAID" -> log.info("Unpaid leave withdrawn — no balance change for employeeId={}", request.getEmployeeId());
                         case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.setRestrictedHolidayUsed(Math.max(0, balance.getRestrictedHolidayUsed() - daysToCredit));
@@ -963,6 +1144,10 @@ public class LeaveService {
             b.setSickLeaveUsed(0.0);
             b.setEarnedLeaveUsed(0.0);
             b.setWorkFromHomeUsed(0.0);
+            b.setRestrictedHolidayUsed(0.0);
+            b.setCarriedForwardLeaveQuota(0.0);
+            b.setCarriedForwardLeaveUsed(0.0);
+            b.setCarriedForwardExpired(false);
         }
         leaveBalanceRepository.saveAll(balances);
 
@@ -1010,8 +1195,10 @@ public class LeaveService {
                     String normType = reqType.replaceAll("_LEAVE$", "");
                     switch (normType) {
                         case "SICK" -> balance.setSickLeaveUsed(Math.max(0.0, balance.getSickLeaveUsed() - requestedDays));
-                        case "EARNED" -> balance.setEarnedLeaveUsed(Math.max(0.0, balance.getEarnedLeaveUsed() - requestedDays));
+                        case "EARNED" -> refundEarnedLeaveWithPriority(balance, requestedDays);
                         case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0.0, balance.getWorkFromHomeUsed() - requestedDays));
+                        case "UNPAID" -> log.info("Unpaid leave cancelled — no balance change for employeeId={}", request.getEmployeeId());
+                        case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.setRestrictedHolidayUsed(Math.max(0.0, balance.getRestrictedHolidayUsed() - requestedDays));
                         default -> balance.setCasualLeaveUsed(Math.max(0.0, balance.getCasualLeaveUsed() - requestedDays));
                     }
                     leaveBalanceRepository.save(balance);
@@ -1043,6 +1230,10 @@ public class LeaveService {
             b.setSickLeaveUsed(0.0);
             b.setEarnedLeaveUsed(0.0);
             b.setWorkFromHomeUsed(0.0);
+            b.setRestrictedHolidayUsed(0.0);
+            b.setCarriedForwardLeaveQuota(0.0);
+            b.setCarriedForwardLeaveUsed(0.0);
+            b.setCarriedForwardExpired(false);
         }
         leaveBalanceRepository.saveAll(balances);
 

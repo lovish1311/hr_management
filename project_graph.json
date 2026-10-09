@@ -1,0 +1,6494 @@
+{
+  "version": "1.0.0",
+  "total_nodes": 218,
+  "total_edges": 387,
+  "features": [
+    "attendance",
+    "auth",
+    "core",
+    "dashboard",
+    "email",
+    "employees",
+    "games",
+    "holidays",
+    "leaves",
+    "payroll",
+    "performance",
+    "recruitment",
+    "scribbil",
+    "settings",
+    "tambola"
+  ],
+  "nodes": {
+    "HrManagementApplication": {
+      "id": "HrManagementApplication",
+      "class": "HrManagementApplication",
+      "package": "com.example.hr_management_backend",
+      "path": "src/main/java/com/example/hr_management_backend/HrManagementApplication.java",
+      "feature": "core",
+      "layer": "other",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "company",
+        "SpringBootApplication",
+        "Bean"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "User",
+        "UserRepository"
+      ]
+    },
+    "ServletInitializer": {
+      "id": "ServletInitializer",
+      "class": "ServletInitializer",
+      "package": "com.example.hr_management_backend",
+      "path": "src/main/java/com/example/hr_management_backend/ServletInitializer.java",
+      "feature": "core",
+      "layer": "other",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override"
+      ],
+      "dependencies": []
+    },
+    "AsyncConfig": {
+      "id": "AsyncConfig",
+      "class": "AsyncConfig",
+      "package": "com.example.hr_management_backend.core.config",
+      "path": "src/main/java/com/example/hr_management_backend/core/config/AsyncConfig.java",
+      "feature": "core",
+      "layer": "config",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "EnableAsync",
+        "Configuration",
+        "Bean"
+      ],
+      "dependencies": []
+    },
+    "CacheConfig": {
+      "id": "CacheConfig",
+      "class": "CacheConfig",
+      "package": "com.example.hr_management_backend.core.config",
+      "path": "src/main/java/com/example/hr_management_backend/core/config/CacheConfig.java",
+      "feature": "core",
+      "layer": "config",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Bean",
+        "Configuration",
+        "EnableCaching"
+      ],
+      "dependencies": []
+    },
+    "DataInitializer": {
+      "id": "DataInitializer",
+      "class": "DataInitializer",
+      "package": "com.example.hr_management_backend.core.config",
+      "path": "src/main/java/com/example/hr_management_backend/core/config/DataInitializer.java",
+      "feature": "core",
+      "layer": "config",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Component",
+        "Slf4j",
+        "company",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "Attendance",
+        "AttendanceRepository",
+        "Employee",
+        "EmployeeRepository",
+        "LeaveBalance",
+        "LeaveBalanceRepository",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "User",
+        "UserRepository"
+      ]
+    },
+    "DotenvLoader": {
+      "id": "DotenvLoader",
+      "class": "DotenvLoader",
+      "package": "com.example.hr_management_backend.core.config",
+      "path": "src/main/java/com/example/hr_management_backend/core/config/DotenvLoader.java",
+      "feature": "core",
+      "layer": "config",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Value"
+      ],
+      "dependencies": []
+    },
+    "JacksonConfig": {
+      "id": "JacksonConfig",
+      "class": "JacksonConfig",
+      "package": "com.example.hr_management_backend.core.config",
+      "path": "src/main/java/com/example/hr_management_backend/core/config/JacksonConfig.java",
+      "feature": "core",
+      "layer": "config",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Primary",
+        "Configuration",
+        "Bean"
+      ],
+      "dependencies": []
+    },
+    "GlobalExceptionHandler": {
+      "id": "GlobalExceptionHandler",
+      "class": "GlobalExceptionHandler",
+      "package": "com.example.hr_management_backend.core.exception",
+      "path": "src/main/java/com/example/hr_management_backend/core/exception/GlobalExceptionHandler.java",
+      "feature": "core",
+      "layer": "exception",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RestControllerAdvice",
+        "ExceptionHandler"
+      ],
+      "dependencies": []
+    },
+    "ResourceNotFoundException": {
+      "id": "ResourceNotFoundException",
+      "class": "ResourceNotFoundException",
+      "package": "com.example.hr_management_backend.core.exception",
+      "path": "src/main/java/com/example/hr_management_backend/core/exception/ResourceNotFoundException.java",
+      "feature": "core",
+      "layer": "exception",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "ResponseStatus"
+      ],
+      "dependencies": []
+    },
+    "CustomUserDetailsService": {
+      "id": "CustomUserDetailsService",
+      "class": "CustomUserDetailsService",
+      "package": "com.example.hr_management_backend.core.security",
+      "path": "src/main/java/com/example/hr_management_backend/core/security/CustomUserDetailsService.java",
+      "feature": "core",
+      "layer": "security",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Override",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeAuthorityRepository",
+        "EmployeeRepository",
+        "User",
+        "UserRepository"
+      ]
+    },
+    "JwtAuthenticationFilter": {
+      "id": "JwtAuthenticationFilter",
+      "class": "JwtAuthenticationFilter",
+      "package": "com.example.hr_management_backend.core.security",
+      "path": "src/main/java/com/example/hr_management_backend/core/security/JwtAuthenticationFilter.java",
+      "feature": "core",
+      "layer": "security",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Override",
+        "Component",
+        "NonNull"
+      ],
+      "dependencies": []
+    },
+    "JwtUtils": {
+      "id": "JwtUtils",
+      "class": "JwtUtils",
+      "package": "com.example.hr_management_backend.core.security",
+      "path": "src/main/java/com/example/hr_management_backend/core/security/JwtUtils.java",
+      "feature": "core",
+      "layer": "security",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Value",
+        "SuppressWarnings",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "SecurityConfig": {
+      "id": "SecurityConfig",
+      "class": "SecurityConfig",
+      "package": "com.example.hr_management_backend.core.security",
+      "path": "src/main/java/com/example/hr_management_backend/core/security/SecurityConfig.java",
+      "feature": "core",
+      "layer": "security",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "EnableWebSecurity",
+        "EnableMethodSecurity",
+        "RequiredArgsConstructor",
+        "Configuration",
+        "Bean"
+      ],
+      "dependencies": []
+    },
+    "AttendanceController": {
+      "id": "AttendanceController",
+      "class": "AttendanceController",
+      "package": "com.example.hr_management_backend.features.attendance.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/attendance/controller/AttendanceController.java",
+      "feature": "attendance",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "CrossOrigin",
+        "DeleteMapping",
+        "RequestMapping",
+        "RequestParam",
+        "PathVariable",
+        "PostMapping",
+        "GetMapping",
+        "RequiredArgsConstructor",
+        "RestController"
+      ],
+      "dependencies": [
+        "Attendance",
+        "AttendanceCalendarDayDto",
+        "AttendanceService"
+      ]
+    },
+    "AttendanceCalendarDayDto": {
+      "id": "AttendanceCalendarDayDto",
+      "class": "AttendanceCalendarDayDto",
+      "package": "com.example.hr_management_backend.features.attendance.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/attendance/dto/AttendanceCalendarDayDto.java",
+      "feature": "attendance",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "BiometricImportRowDto": {
+      "id": "BiometricImportRowDto",
+      "class": "BiometricImportRowDto",
+      "package": "com.example.hr_management_backend.features.attendance.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/attendance/dto/BiometricImportRowDto.java",
+      "feature": "attendance",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "BiometricImportSummaryDto": {
+      "id": "BiometricImportSummaryDto",
+      "class": "BiometricImportSummaryDto",
+      "package": "com.example.hr_management_backend.features.attendance.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/attendance/dto/BiometricImportSummaryDto.java",
+      "feature": "attendance",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "LeaveEventListener": {
+      "id": "LeaveEventListener",
+      "class": "LeaveEventListener",
+      "package": "com.example.hr_management_backend.features.attendance.listener",
+      "path": "src/main/java/com/example/hr_management_backend/features/attendance/listener/LeaveEventListener.java",
+      "feature": "attendance",
+      "layer": "listener",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Component",
+        "TransactionalEventListener",
+        "Slf4j"
+      ],
+      "dependencies": [
+        "AttendanceService",
+        "LeaveApprovedEvent",
+        "LeaveWithdrawnEvent"
+      ]
+    },
+    "Attendance": {
+      "id": "Attendance",
+      "class": "Attendance",
+      "package": "com.example.hr_management_backend.features.attendance.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/attendance/model/Attendance.java",
+      "feature": "attendance",
+      "layer": "model",
+      "is_test": false,
+      "table": "attendance",
+      "base_endpoint": "",
+      "annotations": [
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue"
+      ],
+      "dependencies": []
+    },
+    "AttendanceRepository": {
+      "id": "AttendanceRepository",
+      "class": "AttendanceRepository",
+      "package": "com.example.hr_management_backend.features.attendance.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/attendance/repository/AttendanceRepository.java",
+      "feature": "attendance",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "Attendance"
+      ]
+    },
+    "AttendanceService": {
+      "id": "AttendanceService",
+      "class": "AttendanceService",
+      "package": "com.example.hr_management_backend.features.attendance.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/attendance/service/AttendanceService.java",
+      "feature": "attendance",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "Attendance",
+        "AttendanceCalendarDayDto",
+        "AttendanceRepository",
+        "BiometricImportRowDto",
+        "BiometricImportSummaryDto",
+        "Employee",
+        "EmployeeRepository",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "SettingsService"
+      ]
+    },
+    "AuthController": {
+      "id": "AuthController",
+      "class": "AuthController",
+      "package": "com.example.hr_management_backend.features.auth.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/controller/AuthController.java",
+      "feature": "auth",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "/api/auth",
+      "annotations": [
+        "CrossOrigin",
+        "Valid",
+        "RequestMapping",
+        "RequestBody",
+        "PreAuthorize",
+        "PatchMapping",
+        "PostMapping",
+        "GetMapping",
+        "PathVariable",
+        "RequiredArgsConstructor",
+        "RestController"
+      ],
+      "dependencies": [
+        "AuthService",
+        "LoginRequest",
+        "LoginResponse",
+        "RegisterRequest",
+        "UpdateRoleDto",
+        "User"
+      ]
+    },
+    "ActivateAccountRequest": {
+      "id": "ActivateAccountRequest",
+      "class": "ActivateAccountRequest",
+      "package": "com.example.hr_management_backend.features.auth.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/dto/ActivateAccountRequest.java",
+      "feature": "auth",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Size",
+        "NotBlank",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "ForgotPasswordRequest": {
+      "id": "ForgotPasswordRequest",
+      "class": "ForgotPasswordRequest",
+      "package": "com.example.hr_management_backend.features.auth.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/dto/ForgotPasswordRequest.java",
+      "feature": "auth",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NotBlank",
+        "Email",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "LoginRequest": {
+      "id": "LoginRequest",
+      "class": "LoginRequest",
+      "package": "com.example.hr_management_backend.features.auth.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/dto/LoginRequest.java",
+      "feature": "auth",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "NotBlank",
+        "Email",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "LoginResponse": {
+      "id": "LoginResponse",
+      "class": "LoginResponse",
+      "package": "com.example.hr_management_backend.features.auth.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/dto/LoginResponse.java",
+      "feature": "auth",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "RegisterRequest": {
+      "id": "RegisterRequest",
+      "class": "RegisterRequest",
+      "package": "com.example.hr_management_backend.features.auth.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/dto/RegisterRequest.java",
+      "feature": "auth",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Size",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "NotBlank",
+        "Email",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "ResetPasswordRequest": {
+      "id": "ResetPasswordRequest",
+      "class": "ResetPasswordRequest",
+      "package": "com.example.hr_management_backend.features.auth.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/dto/ResetPasswordRequest.java",
+      "feature": "auth",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Size",
+        "NotBlank",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "UpdateRoleDto": {
+      "id": "UpdateRoleDto",
+      "class": "UpdateRoleDto",
+      "package": "com.example.hr_management_backend.features.auth.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/dto/UpdateRoleDto.java",
+      "feature": "auth",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "AllArgsConstructor",
+        "NotBlank",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "PasswordResetToken": {
+      "id": "PasswordResetToken",
+      "class": "PasswordResetToken",
+      "package": "com.example.hr_management_backend.features.auth.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/model/PasswordResetToken.java",
+      "feature": "auth",
+      "layer": "model",
+      "is_test": false,
+      "table": "password_reset_tokens",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "User": {
+      "id": "User",
+      "class": "User",
+      "package": "com.example.hr_management_backend.features.auth.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/model/User.java",
+      "feature": "auth",
+      "layer": "model",
+      "is_test": false,
+      "table": "users",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "UserActivationToken": {
+      "id": "UserActivationToken",
+      "class": "UserActivationToken",
+      "package": "com.example.hr_management_backend.features.auth.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/model/UserActivationToken.java",
+      "feature": "auth",
+      "layer": "model",
+      "is_test": false,
+      "table": "user_activation_tokens",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "PasswordResetTokenRepository": {
+      "id": "PasswordResetTokenRepository",
+      "class": "PasswordResetTokenRepository",
+      "package": "com.example.hr_management_backend.features.auth.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/repository/PasswordResetTokenRepository.java",
+      "feature": "auth",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Param",
+        "Modifying",
+        "Query",
+        "Repository",
+        "org"
+      ],
+      "dependencies": [
+        "PasswordResetToken"
+      ]
+    },
+    "UserActivationTokenRepository": {
+      "id": "UserActivationTokenRepository",
+      "class": "UserActivationTokenRepository",
+      "package": "com.example.hr_management_backend.features.auth.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/repository/UserActivationTokenRepository.java",
+      "feature": "auth",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository",
+        "Query",
+        "Param",
+        "Modifying"
+      ],
+      "dependencies": [
+        "UserActivationToken"
+      ]
+    },
+    "UserRepository": {
+      "id": "UserRepository",
+      "class": "UserRepository",
+      "package": "com.example.hr_management_backend.features.auth.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/repository/UserRepository.java",
+      "feature": "auth",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "User"
+      ]
+    },
+    "AuthService": {
+      "id": "AuthService",
+      "class": "AuthService",
+      "package": "com.example.hr_management_backend.features.auth.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/service/AuthService.java",
+      "feature": "auth",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": [
+        "LoginRequest",
+        "LoginResponse",
+        "RegisterRequest",
+        "User"
+      ]
+    },
+    "AuthServiceImpl": {
+      "id": "AuthServiceImpl",
+      "class": "AuthServiceImpl",
+      "package": "com.example.hr_management_backend.features.auth.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/service/AuthServiceImpl.java",
+      "feature": "auth",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "EmailOutboxService",
+        "Employee",
+        "EmployeeRepository",
+        "JwtUtils",
+        "LoginRequest",
+        "LoginResponse",
+        "PasswordResetToken",
+        "PasswordResetTokenRepository",
+        "RegisterRequest",
+        "User",
+        "UserActivationToken",
+        "UserActivationTokenRepository",
+        "UserRepository"
+      ]
+    },
+    "PermissionWebSocketConfig": {
+      "id": "PermissionWebSocketConfig",
+      "class": "PermissionWebSocketConfig",
+      "package": "com.example.hr_management_backend.features.auth.websocket",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/websocket/PermissionWebSocketConfig.java",
+      "feature": "auth",
+      "layer": "websocket",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Configuration",
+        "Override",
+        "EnableWebSocket"
+      ],
+      "dependencies": []
+    },
+    "PermissionWebSocketHandler": {
+      "id": "PermissionWebSocketHandler",
+      "class": "PermissionWebSocketHandler",
+      "package": "com.example.hr_management_backend.features.auth.websocket",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/websocket/PermissionWebSocketHandler.java",
+      "feature": "auth",
+      "layer": "websocket",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Override",
+        "Slf4j",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "PermissionWebSocketSessionManager": {
+      "id": "PermissionWebSocketSessionManager",
+      "class": "PermissionWebSocketSessionManager",
+      "package": "com.example.hr_management_backend.features.auth.websocket",
+      "path": "src/main/java/com/example/hr_management_backend/features/auth/websocket/PermissionWebSocketSessionManager.java",
+      "feature": "auth",
+      "layer": "websocket",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Slf4j",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "DashboardController": {
+      "id": "DashboardController",
+      "class": "DashboardController",
+      "package": "com.example.hr_management_backend.features.dashboard.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/dashboard/controller/DashboardController.java",
+      "feature": "dashboard",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "CrossOrigin",
+        "RequestMapping",
+        "GetMapping",
+        "RequiredArgsConstructor",
+        "RestController"
+      ],
+      "dependencies": [
+        "DashboardService",
+        "DashboardStatsResponse"
+      ]
+    },
+    "DashboardStatsResponse": {
+      "id": "DashboardStatsResponse",
+      "class": "DashboardStatsResponse",
+      "package": "com.example.hr_management_backend.features.dashboard.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/dashboard/dto/DashboardStatsResponse.java",
+      "feature": "dashboard",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "DashboardService": {
+      "id": "DashboardService",
+      "class": "DashboardService",
+      "package": "com.example.hr_management_backend.features.dashboard.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/dashboard/service/DashboardService.java",
+      "feature": "dashboard",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": [
+        "DashboardStatsResponse"
+      ]
+    },
+    "DashboardServiceImpl": {
+      "id": "DashboardServiceImpl",
+      "class": "DashboardServiceImpl",
+      "package": "com.example.hr_management_backend.features.dashboard.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/dashboard/service/DashboardServiceImpl.java",
+      "feature": "dashboard",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Service",
+        "Slf4j",
+        "Qualifier",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "AttendanceRepository",
+        "DashboardStatsResponse",
+        "EmployeeRepository",
+        "LeaveRequestRepository"
+      ]
+    },
+    "PostmarkClient": {
+      "id": "PostmarkClient",
+      "class": "PostmarkClient",
+      "package": "com.example.hr_management_backend.features.email.client",
+      "path": "src/main/java/com/example/hr_management_backend/features/email/client/PostmarkClient.java",
+      "feature": "email",
+      "layer": "client",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Value",
+        "AllArgsConstructor",
+        "Component",
+        "grootsoftwares",
+        "NoArgsConstructor",
+        "Slf4j",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "EmailOutbox": {
+      "id": "EmailOutbox",
+      "class": "EmailOutbox",
+      "package": "com.example.hr_management_backend.features.email.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/email/model/EmailOutbox.java",
+      "feature": "email",
+      "layer": "model",
+      "is_test": false,
+      "table": "email_outbox",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "EmailOutboxRepository": {
+      "id": "EmailOutboxRepository",
+      "class": "EmailOutboxRepository",
+      "package": "com.example.hr_management_backend.features.email.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/email/repository/EmailOutboxRepository.java",
+      "feature": "email",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Param",
+        "Modifying",
+        "Query",
+        "Repository",
+        "org"
+      ],
+      "dependencies": [
+        "EmailOutbox"
+      ]
+    },
+    "EmailOutboxService": {
+      "id": "EmailOutboxService",
+      "class": "EmailOutboxService",
+      "package": "com.example.hr_management_backend.features.email.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/email/service/EmailOutboxService.java",
+      "feature": "email",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "EmailOutbox",
+        "EmailOutboxRepository"
+      ]
+    },
+    "OutboxDispatcherService": {
+      "id": "OutboxDispatcherService",
+      "class": "OutboxDispatcherService",
+      "package": "com.example.hr_management_backend.features.email.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/email/service/OutboxDispatcherService.java",
+      "feature": "email",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Slf4j",
+        "Async",
+        "Scheduled"
+      ],
+      "dependencies": [
+        "EmailOutbox",
+        "EmailOutboxRepository",
+        "PostmarkClient"
+      ]
+    },
+    "EmployeeController": {
+      "id": "EmployeeController",
+      "class": "EmployeeController",
+      "package": "com.example.hr_management_backend.features.employees.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/controller/EmployeeController.java",
+      "feature": "employees",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "CrossOrigin",
+        "RequestMapping",
+        "RequestBody",
+        "PreAuthorize",
+        "RequestParam",
+        "PathVariable",
+        "PostMapping",
+        "GetMapping",
+        "RequiredArgsConstructor",
+        "RestController"
+      ],
+      "dependencies": [
+        "AssignManagerDto",
+        "Employee",
+        "EmployeeDetailDto",
+        "EmployeeService",
+        "EmployeeSummaryDto",
+        "StarredPeerRepository"
+      ]
+    },
+    "AssignManagerDto": {
+      "id": "AssignManagerDto",
+      "class": "AssignManagerDto",
+      "package": "com.example.hr_management_backend.features.employees.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/dto/AssignManagerDto.java",
+      "feature": "employees",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "AllArgsConstructor",
+        "NotNull",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "ElevateEmployeeDto": {
+      "id": "ElevateEmployeeDto",
+      "class": "ElevateEmployeeDto",
+      "package": "com.example.hr_management_backend.features.employees.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/dto/ElevateEmployeeDto.java",
+      "feature": "employees",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "EmployeeDetailDto": {
+      "id": "EmployeeDetailDto",
+      "class": "EmployeeDetailDto",
+      "package": "com.example.hr_management_backend.features.employees.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/dto/EmployeeDetailDto.java",
+      "feature": "employees",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "EmployeeSummaryDto": {
+      "id": "EmployeeSummaryDto",
+      "class": "EmployeeSummaryDto",
+      "package": "com.example.hr_management_backend.features.employees.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/dto/EmployeeSummaryDto.java",
+      "feature": "employees",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "UpdatePermissionsDto": {
+      "id": "UpdatePermissionsDto",
+      "class": "UpdatePermissionsDto",
+      "package": "com.example.hr_management_backend.features.employees.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/dto/UpdatePermissionsDto.java",
+      "feature": "employees",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "Employee": {
+      "id": "Employee",
+      "class": "Employee",
+      "package": "com.example.hr_management_backend.features.employees.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/model/Employee.java",
+      "feature": "employees",
+      "layer": "model",
+      "is_test": false,
+      "table": "employees",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "EmployeeAuthority": {
+      "id": "EmployeeAuthority",
+      "class": "EmployeeAuthority",
+      "package": "com.example.hr_management_backend.features.employees.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/model/EmployeeAuthority.java",
+      "feature": "employees",
+      "layer": "model",
+      "is_test": false,
+      "table": "employee_authorities",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "StarredPeer": {
+      "id": "StarredPeer",
+      "class": "StarredPeer",
+      "package": "com.example.hr_management_backend.features.employees.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/model/StarredPeer.java",
+      "feature": "employees",
+      "layer": "model",
+      "is_test": false,
+      "table": "starred_peers",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "EmployeeAuthorityRepository": {
+      "id": "EmployeeAuthorityRepository",
+      "class": "EmployeeAuthorityRepository",
+      "package": "com.example.hr_management_backend.features.employees.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/repository/EmployeeAuthorityRepository.java",
+      "feature": "employees",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Param",
+        "Modifying",
+        "Transactional",
+        "Query",
+        "Repository"
+      ],
+      "dependencies": [
+        "EmployeeAuthority"
+      ]
+    },
+    "EmployeeRepository": {
+      "id": "EmployeeRepository",
+      "class": "EmployeeRepository",
+      "package": "com.example.hr_management_backend.features.employees.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/repository/EmployeeRepository.java",
+      "feature": "employees",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Param",
+        "EntityGraph",
+        "Query",
+        "Repository",
+        "org"
+      ],
+      "dependencies": [
+        "Employee"
+      ]
+    },
+    "StarredPeerRepository": {
+      "id": "StarredPeerRepository",
+      "class": "StarredPeerRepository",
+      "package": "com.example.hr_management_backend.features.employees.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/repository/StarredPeerRepository.java",
+      "feature": "employees",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "StarredPeer"
+      ]
+    },
+    "EmployeeService": {
+      "id": "EmployeeService",
+      "class": "EmployeeService",
+      "package": "com.example.hr_management_backend.features.employees.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/service/EmployeeService.java",
+      "feature": "employees",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": [
+        "Employee",
+        "EmployeeDetailDto",
+        "EmployeeSummaryDto"
+      ]
+    },
+    "EmployeeServiceImpl": {
+      "id": "EmployeeServiceImpl",
+      "class": "EmployeeServiceImpl",
+      "package": "com.example.hr_management_backend.features.employees.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/employees/service/EmployeeServiceImpl.java",
+      "feature": "employees",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Cacheable",
+        "Service",
+        "RequiredArgsConstructor",
+        "Transactional",
+        "Slf4j",
+        "org",
+        "CacheEvict"
+      ],
+      "dependencies": [
+        "Attendance",
+        "AttendanceRepository",
+        "ElevateEmployeeDto",
+        "EmailOutboxService",
+        "Employee",
+        "EmployeeAuthority",
+        "EmployeeAuthorityRepository",
+        "EmployeeDetailDto",
+        "EmployeeRepository",
+        "EmployeeSummaryDto",
+        "LeaveBalanceRepository",
+        "LeaveRequestRepository",
+        "ResourceNotFoundException",
+        "User",
+        "UserActivationTokenRepository",
+        "UserRepository"
+      ]
+    },
+    "GameController": {
+      "id": "GameController",
+      "class": "GameController",
+      "package": "com.example.hr_management_backend.features.games.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/games/controller/GameController.java",
+      "feature": "games",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "/api/games",
+      "annotations": [
+        "RequestMapping",
+        "PreAuthorize",
+        "RequestParam",
+        "PathVariable",
+        "PatchMapping",
+        "GetMapping",
+        "RequiredArgsConstructor",
+        "RestController"
+      ],
+      "dependencies": [
+        "CompanyGame",
+        "CompanyGameService"
+      ]
+    },
+    "CompanyGame": {
+      "id": "CompanyGame",
+      "class": "CompanyGame",
+      "package": "com.example.hr_management_backend.features.games.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/games/model/CompanyGame.java",
+      "feature": "games",
+      "layer": "model",
+      "is_test": false,
+      "table": "company_games",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Entity",
+        "Getter",
+        "Table",
+        "Setter",
+        "Id"
+      ],
+      "dependencies": []
+    },
+    "CompanyGameRepository": {
+      "id": "CompanyGameRepository",
+      "class": "CompanyGameRepository",
+      "package": "com.example.hr_management_backend.features.games.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/games/repository/CompanyGameRepository.java",
+      "feature": "games",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "CompanyGame"
+      ]
+    },
+    "CompanyGameService": {
+      "id": "CompanyGameService",
+      "class": "CompanyGameService",
+      "package": "com.example.hr_management_backend.features.games.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/games/service/CompanyGameService.java",
+      "feature": "games",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": [
+        "CompanyGame"
+      ]
+    },
+    "CompanyGameServiceImpl": {
+      "id": "CompanyGameServiceImpl",
+      "class": "CompanyGameServiceImpl",
+      "package": "com.example.hr_management_backend.features.games.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/games/service/CompanyGameServiceImpl.java",
+      "feature": "games",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor",
+        "PostConstruct"
+      ],
+      "dependencies": [
+        "CompanyGame",
+        "CompanyGameRepository"
+      ]
+    },
+    "HolidayController": {
+      "id": "HolidayController",
+      "class": "HolidayController",
+      "package": "com.example.hr_management_backend.features.holidays.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/holidays/controller/HolidayController.java",
+      "feature": "holidays",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "CrossOrigin",
+        "RequestMapping",
+        "PreAuthorize",
+        "Slf4j",
+        "RequestParam",
+        "PathVariable",
+        "GetMapping",
+        "RequiredArgsConstructor",
+        "RestController"
+      ],
+      "dependencies": [
+        "AuthService",
+        "EmployeeHolidayCalendarDto",
+        "Holiday",
+        "HolidayList",
+        "HolidayListDto",
+        "HolidayService",
+        "User"
+      ]
+    },
+    "EmployeeHolidayCalendarDto": {
+      "id": "EmployeeHolidayCalendarDto",
+      "class": "EmployeeHolidayCalendarDto",
+      "package": "com.example.hr_management_backend.features.holidays.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/holidays/dto/EmployeeHolidayCalendarDto.java",
+      "feature": "holidays",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "HolidayDto": {
+      "id": "HolidayDto",
+      "class": "HolidayDto",
+      "package": "com.example.hr_management_backend.features.holidays.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/holidays/dto/HolidayDto.java",
+      "feature": "holidays",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "HolidayListDto": {
+      "id": "HolidayListDto",
+      "class": "HolidayListDto",
+      "package": "com.example.hr_management_backend.features.holidays.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/holidays/dto/HolidayListDto.java",
+      "feature": "holidays",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "Holiday": {
+      "id": "Holiday",
+      "class": "Holiday",
+      "package": "com.example.hr_management_backend.features.holidays.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/holidays/model/Holiday.java",
+      "feature": "holidays",
+      "layer": "model",
+      "is_test": false,
+      "table": "holidays",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "HolidayList": {
+      "id": "HolidayList",
+      "class": "HolidayList",
+      "package": "com.example.hr_management_backend.features.holidays.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/holidays/model/HolidayList.java",
+      "feature": "holidays",
+      "layer": "model",
+      "is_test": false,
+      "table": "holiday_lists",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "HolidayListRepository": {
+      "id": "HolidayListRepository",
+      "class": "HolidayListRepository",
+      "package": "com.example.hr_management_backend.features.holidays.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/holidays/repository/HolidayListRepository.java",
+      "feature": "holidays",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "HolidayList"
+      ]
+    },
+    "HolidayRepository": {
+      "id": "HolidayRepository",
+      "class": "HolidayRepository",
+      "package": "com.example.hr_management_backend.features.holidays.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/holidays/repository/HolidayRepository.java",
+      "feature": "holidays",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository",
+        "Param",
+        "Query"
+      ],
+      "dependencies": [
+        "Holiday"
+      ]
+    },
+    "HolidayService": {
+      "id": "HolidayService",
+      "class": "HolidayService",
+      "package": "com.example.hr_management_backend.features.holidays.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/holidays/service/HolidayService.java",
+      "feature": "holidays",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor",
+        "CacheEvict"
+      ],
+      "dependencies": [
+        "EmployeeHolidayCalendarDto",
+        "Holiday",
+        "HolidayDto",
+        "HolidayList",
+        "HolidayListDto",
+        "HolidayListRepository",
+        "HolidayRepository",
+        "LeaveBalance",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "LeaveService",
+        "SettingsService"
+      ]
+    },
+    "LeaveController": {
+      "id": "LeaveController",
+      "class": "LeaveController",
+      "package": "com.example.hr_management_backend.features.leaves.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/controller/LeaveController.java",
+      "feature": "leaves",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "CrossOrigin",
+        "RequestMapping",
+        "RequestBody",
+        "PreAuthorize",
+        "RequestParam",
+        "PathVariable",
+        "PostMapping",
+        "GetMapping",
+        "RequiredArgsConstructor",
+        "RestController",
+        "PutMapping"
+      ],
+      "dependencies": [
+        "LeaveBalance",
+        "LeaveRequest",
+        "LeaveService"
+      ]
+    },
+    "LeaveRequestDto": {
+      "id": "LeaveRequestDto",
+      "class": "LeaveRequestDto",
+      "package": "com.example.hr_management_backend.features.leaves.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/dto/LeaveRequestDto.java",
+      "feature": "leaves",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "LeaveApprovedEvent": {
+      "id": "LeaveApprovedEvent",
+      "class": "LeaveApprovedEvent",
+      "package": "com.example.hr_management_backend.features.leaves.event",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/event/LeaveApprovedEvent.java",
+      "feature": "leaves",
+      "layer": "event",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Getter",
+        "AllArgsConstructor"
+      ],
+      "dependencies": []
+    },
+    "LeaveWithdrawnEvent": {
+      "id": "LeaveWithdrawnEvent",
+      "class": "LeaveWithdrawnEvent",
+      "package": "com.example.hr_management_backend.features.leaves.event",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/event/LeaveWithdrawnEvent.java",
+      "feature": "leaves",
+      "layer": "event",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Getter",
+        "AllArgsConstructor"
+      ],
+      "dependencies": []
+    },
+    "EmployeeLeaveQuota": {
+      "id": "EmployeeLeaveQuota",
+      "class": "EmployeeLeaveQuota",
+      "package": "com.example.hr_management_backend.features.leaves.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/model/EmployeeLeaveQuota.java",
+      "feature": "leaves",
+      "layer": "model",
+      "is_test": false,
+      "table": "employee_leave_quotas",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "LeaveBalance": {
+      "id": "LeaveBalance",
+      "class": "LeaveBalance",
+      "package": "com.example.hr_management_backend.features.leaves.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/model/LeaveBalance.java",
+      "feature": "leaves",
+      "layer": "model",
+      "is_test": false,
+      "table": "leave_balances",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "LeaveRequest": {
+      "id": "LeaveRequest",
+      "class": "LeaveRequest",
+      "package": "com.example.hr_management_backend.features.leaves.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/model/LeaveRequest.java",
+      "feature": "leaves",
+      "layer": "model",
+      "is_test": false,
+      "table": "leave_requests",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Version",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "LeavePolicyEngine": {
+      "id": "LeavePolicyEngine",
+      "class": "LeavePolicyEngine",
+      "package": "com.example.hr_management_backend.features.leaves.policy",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/policy/LeavePolicyEngine.java",
+      "feature": "leaves",
+      "layer": "policy",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Component",
+        "Slf4j"
+      ],
+      "dependencies": [
+        "Employee",
+        "LeaveRequest"
+      ]
+    },
+    "LeavePolicyRule": {
+      "id": "LeavePolicyRule",
+      "class": "LeavePolicyRule",
+      "package": "com.example.hr_management_backend.features.leaves.policy",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/policy/LeavePolicyRule.java",
+      "feature": "leaves",
+      "layer": "policy",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": [
+        "Employee",
+        "LeaveRequest"
+      ]
+    },
+    "FutureExtensibilityHookRule": {
+      "id": "FutureExtensibilityHookRule",
+      "class": "FutureExtensibilityHookRule",
+      "package": "com.example.hr_management_backend.features.leaves.policy.rules",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/policy/rules/FutureExtensibilityHookRule.java",
+      "feature": "leaves",
+      "layer": "policy",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Component",
+        "Slf4j"
+      ],
+      "dependencies": [
+        "Employee",
+        "LeavePolicyRule",
+        "LeaveRequest"
+      ]
+    },
+    "HolidayLeavePolicyRule": {
+      "id": "HolidayLeavePolicyRule",
+      "class": "HolidayLeavePolicyRule",
+      "package": "com.example.hr_management_backend.features.leaves.policy.rules",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/policy/rules/HolidayLeavePolicyRule.java",
+      "feature": "leaves",
+      "layer": "policy",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Override",
+        "Component",
+        "Slf4j"
+      ],
+      "dependencies": [
+        "Employee",
+        "Holiday",
+        "HolidayRepository",
+        "LeavePolicyRule",
+        "LeaveRequest",
+        "LeaveRequestRepository"
+      ]
+    },
+    "QuotaValidationRule": {
+      "id": "QuotaValidationRule",
+      "class": "QuotaValidationRule",
+      "package": "com.example.hr_management_backend.features.leaves.policy.rules",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/policy/rules/QuotaValidationRule.java",
+      "feature": "leaves",
+      "layer": "policy",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Override",
+        "Component",
+        "Slf4j"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeLeaveQuotaRepository",
+        "LeaveBalance",
+        "LeaveBalanceRepository",
+        "LeavePolicyRule",
+        "LeaveRequest"
+      ]
+    },
+    "SessionOverlapRule": {
+      "id": "SessionOverlapRule",
+      "class": "SessionOverlapRule",
+      "package": "com.example.hr_management_backend.features.leaves.policy.rules",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/policy/rules/SessionOverlapRule.java",
+      "feature": "leaves",
+      "layer": "policy",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Override",
+        "Component"
+      ],
+      "dependencies": [
+        "Employee",
+        "LeaveRequest",
+        "LeaveRequestRepository"
+      ]
+    },
+    "ShortLeaveQuotaRule": {
+      "id": "ShortLeaveQuotaRule",
+      "class": "ShortLeaveQuotaRule",
+      "package": "com.example.hr_management_backend.features.leaves.policy.rules",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/policy/rules/ShortLeaveQuotaRule.java",
+      "feature": "leaves",
+      "layer": "policy",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Override",
+        "Component",
+        "Slf4j"
+      ],
+      "dependencies": [
+        "Employee",
+        "LeavePolicyRule",
+        "LeaveRequest",
+        "LeaveRequestRepository"
+      ]
+    },
+    "EmployeeLeaveQuotaRepository": {
+      "id": "EmployeeLeaveQuotaRepository",
+      "class": "EmployeeLeaveQuotaRepository",
+      "package": "com.example.hr_management_backend.features.leaves.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/repository/EmployeeLeaveQuotaRepository.java",
+      "feature": "leaves",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "EmployeeLeaveQuota"
+      ]
+    },
+    "LeaveBalanceRepository": {
+      "id": "LeaveBalanceRepository",
+      "class": "LeaveBalanceRepository",
+      "package": "com.example.hr_management_backend.features.leaves.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/repository/LeaveBalanceRepository.java",
+      "feature": "leaves",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Lock",
+        "Repository",
+        "Param",
+        "Query"
+      ],
+      "dependencies": [
+        "LeaveBalance"
+      ]
+    },
+    "LeaveRequestRepository": {
+      "id": "LeaveRequestRepository",
+      "class": "LeaveRequestRepository",
+      "package": "com.example.hr_management_backend.features.leaves.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/repository/LeaveRequestRepository.java",
+      "feature": "leaves",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository",
+        "Param",
+        "Query"
+      ],
+      "dependencies": [
+        "LeaveRequest"
+      ]
+    },
+    "LeaveAccrualService": {
+      "id": "LeaveAccrualService",
+      "class": "LeaveAccrualService",
+      "package": "com.example.hr_management_backend.features.leaves.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/service/LeaveAccrualService.java",
+      "feature": "leaves",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Slf4j",
+        "return",
+        "RequiredArgsConstructor",
+        "param"
+      ],
+      "dependencies": [
+        "Employee",
+        "LeaveBalance"
+      ]
+    },
+    "LeaveCarryoverService": {
+      "id": "LeaveCarryoverService",
+      "class": "LeaveCarryoverService",
+      "package": "com.example.hr_management_backend.features.leaves.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/service/LeaveCarryoverService.java",
+      "feature": "leaves",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "Scheduled",
+        "RequiredArgsConstructor",
+        "CacheEvict"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "LeaveBalance",
+        "LeaveBalanceRepository",
+        "SettingsService"
+      ]
+    },
+    "LeaveService": {
+      "id": "LeaveService",
+      "class": "LeaveService",
+      "package": "com.example.hr_management_backend.features.leaves.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/leaves/service/LeaveService.java",
+      "feature": "leaves",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "company",
+        "RequiredArgsConstructor",
+        "CacheEvict"
+      ],
+      "dependencies": [
+        "Attendance",
+        "AttendanceRepository",
+        "Employee",
+        "EmployeeLeaveQuota",
+        "EmployeeLeaveQuotaRepository",
+        "EmployeeRepository",
+        "LeaveApprovedEvent",
+        "LeaveBalance",
+        "LeaveBalanceRepository",
+        "LeaveRequest",
+        "LeaveRequestDto",
+        "LeaveRequestRepository",
+        "LeaveWithdrawnEvent",
+        "SettingsService"
+      ]
+    },
+    "ArrearsDto": {
+      "id": "ArrearsDto",
+      "class": "ArrearsDto",
+      "package": "com.example.hr_management_backend.features.payroll.arrears",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/arrears/ArrearsDto.java",
+      "feature": "payroll",
+      "layer": "arrears",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "ArrearsRecord": {
+      "id": "ArrearsRecord",
+      "class": "ArrearsRecord",
+      "package": "com.example.hr_management_backend.features.payroll.arrears",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/arrears/ArrearsRecord.java",
+      "feature": "payroll",
+      "layer": "arrears",
+      "is_test": false,
+      "table": "payroll_arrears",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "ArrearsRecordRepository": {
+      "id": "ArrearsRecordRepository",
+      "class": "ArrearsRecordRepository",
+      "package": "com.example.hr_management_backend.features.payroll.arrears",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/arrears/ArrearsRecordRepository.java",
+      "feature": "payroll",
+      "layer": "arrears",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": []
+    },
+    "ArrearsService": {
+      "id": "ArrearsService",
+      "class": "ArrearsService",
+      "package": "com.example.hr_management_backend.features.payroll.arrears",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/arrears/ArrearsService.java",
+      "feature": "payroll",
+      "layer": "arrears",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "PayrollRecord",
+        "PayrollRecordRepository",
+        "PayrollStatus",
+        "SalaryStructure",
+        "SalaryStructureRepository"
+      ]
+    },
+    "BankPayoutExportService": {
+      "id": "BankPayoutExportService",
+      "class": "BankPayoutExportService",
+      "package": "com.example.hr_management_backend.features.payroll.banking",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/banking/BankPayoutExportService.java",
+      "feature": "payroll",
+      "layer": "banking",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "PayrollRecord",
+        "PayrollRecordRepository",
+        "PayrollStatus"
+      ]
+    },
+    "PayrollController": {
+      "id": "PayrollController",
+      "class": "PayrollController",
+      "package": "com.example.hr_management_backend.features.payroll.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/controller/PayrollController.java",
+      "feature": "payroll",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "CrossOrigin",
+        "RequestMapping",
+        "RequestBody",
+        "PreAuthorize",
+        "PathVariable",
+        "PostMapping",
+        "GetMapping",
+        "RequiredArgsConstructor",
+        "RestController"
+      ],
+      "dependencies": [
+        "ArrearsDto",
+        "ArrearsService",
+        "BankPayoutExportService",
+        "Payroll",
+        "PayrollProcessingService",
+        "PayrollReconciliationReportDto",
+        "PayrollReconciliationService",
+        "PayrollService"
+      ]
+    },
+    "MonthlyPayrollInputDto": {
+      "id": "MonthlyPayrollInputDto",
+      "class": "MonthlyPayrollInputDto",
+      "package": "com.example.hr_management_backend.features.payroll.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/dto/MonthlyPayrollInputDto.java",
+      "feature": "payroll",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "PayrollRecordDto": {
+      "id": "PayrollRecordDto",
+      "class": "PayrollRecordDto",
+      "package": "com.example.hr_management_backend.features.payroll.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/dto/PayrollRecordDto.java",
+      "feature": "payroll",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": [
+        "PayrollStatus"
+      ]
+    },
+    "PayrollSummaryDto": {
+      "id": "PayrollSummaryDto",
+      "class": "PayrollSummaryDto",
+      "package": "com.example.hr_management_backend.features.payroll.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/dto/PayrollSummaryDto.java",
+      "feature": "payroll",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "SalaryStructureDto": {
+      "id": "SalaryStructureDto",
+      "class": "SalaryStructureDto",
+      "package": "com.example.hr_management_backend.features.payroll.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/dto/SalaryStructureDto.java",
+      "feature": "payroll",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "MonthlyPayrollInput": {
+      "id": "MonthlyPayrollInput",
+      "class": "MonthlyPayrollInput",
+      "package": "com.example.hr_management_backend.features.payroll.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/model/MonthlyPayrollInput.java",
+      "feature": "payroll",
+      "layer": "model",
+      "is_test": false,
+      "table": "monthly_payroll_inputs",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "Payroll": {
+      "id": "Payroll",
+      "class": "Payroll",
+      "package": "com.example.hr_management_backend.features.payroll.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/model/Payroll.java",
+      "feature": "payroll",
+      "layer": "model",
+      "is_test": false,
+      "table": "payroll",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "PayrollRecord": {
+      "id": "PayrollRecord",
+      "class": "PayrollRecord",
+      "package": "com.example.hr_management_backend.features.payroll.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/model/PayrollRecord.java",
+      "feature": "payroll",
+      "layer": "model",
+      "is_test": false,
+      "table": "payroll_records",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "PayrollStatus": {
+      "id": "PayrollStatus",
+      "class": "PayrollStatus",
+      "package": "com.example.hr_management_backend.features.payroll.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/model/PayrollStatus.java",
+      "feature": "payroll",
+      "layer": "model",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": []
+    },
+    "SalaryStructure": {
+      "id": "SalaryStructure",
+      "class": "SalaryStructure",
+      "package": "com.example.hr_management_backend.features.payroll.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/model/SalaryStructure.java",
+      "feature": "payroll",
+      "layer": "model",
+      "is_test": false,
+      "table": "salary_structures",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "EmployeePayrollVarianceDto": {
+      "id": "EmployeePayrollVarianceDto",
+      "class": "EmployeePayrollVarianceDto",
+      "package": "com.example.hr_management_backend.features.payroll.reconciliation",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/reconciliation/EmployeePayrollVarianceDto.java",
+      "feature": "payroll",
+      "layer": "reconciliation",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "PayrollReconciliationReportDto": {
+      "id": "PayrollReconciliationReportDto",
+      "class": "PayrollReconciliationReportDto",
+      "package": "com.example.hr_management_backend.features.payroll.reconciliation",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/reconciliation/PayrollReconciliationReportDto.java",
+      "feature": "payroll",
+      "layer": "reconciliation",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "PayrollReconciliationService": {
+      "id": "PayrollReconciliationService",
+      "class": "PayrollReconciliationService",
+      "package": "com.example.hr_management_backend.features.payroll.reconciliation",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/reconciliation/PayrollReconciliationService.java",
+      "feature": "payroll",
+      "layer": "reconciliation",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "PayrollRecord",
+        "PayrollRecordRepository"
+      ]
+    },
+    "VarianceTag": {
+      "id": "VarianceTag",
+      "class": "VarianceTag",
+      "package": "com.example.hr_management_backend.features.payroll.reconciliation",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/reconciliation/VarianceTag.java",
+      "feature": "payroll",
+      "layer": "reconciliation",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": []
+    },
+    "MonthlyPayrollInputRepository": {
+      "id": "MonthlyPayrollInputRepository",
+      "class": "MonthlyPayrollInputRepository",
+      "package": "com.example.hr_management_backend.features.payroll.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/repository/MonthlyPayrollInputRepository.java",
+      "feature": "payroll",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "MonthlyPayrollInput"
+      ]
+    },
+    "PayrollRecordRepository": {
+      "id": "PayrollRecordRepository",
+      "class": "PayrollRecordRepository",
+      "package": "com.example.hr_management_backend.features.payroll.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/repository/PayrollRecordRepository.java",
+      "feature": "payroll",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "PayrollRecord",
+        "PayrollStatus"
+      ]
+    },
+    "PayrollRepository": {
+      "id": "PayrollRepository",
+      "class": "PayrollRepository",
+      "package": "com.example.hr_management_backend.features.payroll.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/repository/PayrollRepository.java",
+      "feature": "payroll",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "Payroll"
+      ]
+    },
+    "SalaryStructureRepository": {
+      "id": "SalaryStructureRepository",
+      "class": "SalaryStructureRepository",
+      "package": "com.example.hr_management_backend.features.payroll.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/repository/SalaryStructureRepository.java",
+      "feature": "payroll",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "SalaryStructure"
+      ]
+    },
+    "PayrollProcessingService": {
+      "id": "PayrollProcessingService",
+      "class": "PayrollProcessingService",
+      "package": "com.example.hr_management_backend.features.payroll.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/service/PayrollProcessingService.java",
+      "feature": "payroll",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "ArrearsService",
+        "Attendance",
+        "AttendanceRepository",
+        "Employee",
+        "EmployeeRepository",
+        "Holiday",
+        "HolidayRepository",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "TaxCalculatorFactory",
+        "TaxDeclarationDto",
+        "TaxRegime"
+      ]
+    },
+    "PayrollService": {
+      "id": "PayrollService",
+      "class": "PayrollService",
+      "package": "com.example.hr_management_backend.features.payroll.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/service/PayrollService.java",
+      "feature": "payroll",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "Payroll",
+        "PayrollRepository"
+      ]
+    },
+    "NewRegimeTaxStrategy": {
+      "id": "NewRegimeTaxStrategy",
+      "class": "NewRegimeTaxStrategy",
+      "package": "com.example.hr_management_backend.features.payroll.tax",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/tax/NewRegimeTaxStrategy.java",
+      "feature": "payroll",
+      "layer": "tax",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "OldRegimeTaxStrategy": {
+      "id": "OldRegimeTaxStrategy",
+      "class": "OldRegimeTaxStrategy",
+      "package": "com.example.hr_management_backend.features.payroll.tax",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/tax/OldRegimeTaxStrategy.java",
+      "feature": "payroll",
+      "layer": "tax",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "TaxCalculationStrategy": {
+      "id": "TaxCalculationStrategy",
+      "class": "TaxCalculationStrategy",
+      "package": "com.example.hr_management_backend.features.payroll.tax",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/tax/TaxCalculationStrategy.java",
+      "feature": "payroll",
+      "layer": "tax",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": []
+    },
+    "TaxCalculatorFactory": {
+      "id": "TaxCalculatorFactory",
+      "class": "TaxCalculatorFactory",
+      "package": "com.example.hr_management_backend.features.payroll.tax",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/tax/TaxCalculatorFactory.java",
+      "feature": "payroll",
+      "layer": "tax",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "TaxDeclarationDto": {
+      "id": "TaxDeclarationDto",
+      "class": "TaxDeclarationDto",
+      "package": "com.example.hr_management_backend.features.payroll.tax",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/tax/TaxDeclarationDto.java",
+      "feature": "payroll",
+      "layer": "tax",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "Builder",
+        "AllArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TaxRegime": {
+      "id": "TaxRegime",
+      "class": "TaxRegime",
+      "package": "com.example.hr_management_backend.features.payroll.tax",
+      "path": "src/main/java/com/example/hr_management_backend/features/payroll/tax/TaxRegime.java",
+      "feature": "payroll",
+      "layer": "tax",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": []
+    },
+    "PerformanceController": {
+      "id": "PerformanceController",
+      "class": "PerformanceController",
+      "package": "com.example.hr_management_backend.features.performance.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/performance/controller/PerformanceController.java",
+      "feature": "performance",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "/api/performance",
+      "annotations": [
+        "RequestMapping",
+        "RequestBody",
+        "Autowired",
+        "PathVariable",
+        "PostMapping",
+        "GetMapping",
+        "RestController"
+      ],
+      "dependencies": [
+        "PerformanceReview",
+        "PerformanceService"
+      ]
+    },
+    "PerformanceReview": {
+      "id": "PerformanceReview",
+      "class": "PerformanceReview",
+      "package": "com.example.hr_management_backend.features.performance.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/performance/model/PerformanceReview.java",
+      "feature": "performance",
+      "layer": "model",
+      "is_test": false,
+      "table": "performance_reviews",
+      "base_endpoint": "",
+      "annotations": [
+        "Entity",
+        "GeneratedValue",
+        "Table",
+        "Id"
+      ],
+      "dependencies": []
+    },
+    "PerformanceReviewRepository": {
+      "id": "PerformanceReviewRepository",
+      "class": "PerformanceReviewRepository",
+      "package": "com.example.hr_management_backend.features.performance.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/performance/repository/PerformanceReviewRepository.java",
+      "feature": "performance",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "PerformanceReview"
+      ]
+    },
+    "PerformanceService": {
+      "id": "PerformanceService",
+      "class": "PerformanceService",
+      "package": "com.example.hr_management_backend.features.performance.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/performance/service/PerformanceService.java",
+      "feature": "performance",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Autowired"
+      ],
+      "dependencies": [
+        "PerformanceReview",
+        "PerformanceReviewRepository"
+      ]
+    },
+    "RecruitmentController": {
+      "id": "RecruitmentController",
+      "class": "RecruitmentController",
+      "package": "com.example.hr_management_backend.features.recruitment.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/recruitment/controller/RecruitmentController.java",
+      "feature": "recruitment",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "/api/recruitment",
+      "annotations": [
+        "RequestMapping",
+        "RequestBody",
+        "Autowired",
+        "PostMapping",
+        "GetMapping",
+        "RestController"
+      ],
+      "dependencies": [
+        "JobPosting",
+        "RecruitmentService"
+      ]
+    },
+    "JobPosting": {
+      "id": "JobPosting",
+      "class": "JobPosting",
+      "package": "com.example.hr_management_backend.features.recruitment.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/recruitment/model/JobPosting.java",
+      "feature": "recruitment",
+      "layer": "model",
+      "is_test": false,
+      "table": "job_postings",
+      "base_endpoint": "",
+      "annotations": [
+        "Entity",
+        "GeneratedValue",
+        "Table",
+        "Id"
+      ],
+      "dependencies": []
+    },
+    "JobPostingRepository": {
+      "id": "JobPostingRepository",
+      "class": "JobPostingRepository",
+      "package": "com.example.hr_management_backend.features.recruitment.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/recruitment/repository/JobPostingRepository.java",
+      "feature": "recruitment",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "JobPosting"
+      ]
+    },
+    "RecruitmentService": {
+      "id": "RecruitmentService",
+      "class": "RecruitmentService",
+      "package": "com.example.hr_management_backend.features.recruitment.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/recruitment/service/RecruitmentService.java",
+      "feature": "recruitment",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "Autowired"
+      ],
+      "dependencies": [
+        "JobPosting",
+        "JobPostingRepository"
+      ]
+    },
+    "DrawGuessController": {
+      "id": "DrawGuessController",
+      "class": "DrawGuessController",
+      "package": "com.example.hr_management_backend.features.scribbil.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/controller/DrawGuessController.java",
+      "feature": "scribbil",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "/api/games/draw-and-guess",
+      "annotations": [
+        "CrossOrigin",
+        "RequestMapping",
+        "RequestBody",
+        "PathVariable",
+        "PostMapping",
+        "GetMapping",
+        "RequiredArgsConstructor",
+        "RestController"
+      ],
+      "dependencies": [
+        "DrawGuessGameService",
+        "WordDictionaryService"
+      ]
+    },
+    "CreateDrawGuessRoomRequest": {
+      "id": "CreateDrawGuessRoomRequest",
+      "class": "CreateDrawGuessRoomRequest",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/CreateDrawGuessRoomRequest.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "DrawGuessGameStateDto": {
+      "id": "DrawGuessGameStateDto",
+      "class": "DrawGuessGameStateDto",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/DrawGuessGameStateDto.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": [
+        "DrawGuessGameState"
+      ]
+    },
+    "DrawGuessPlayerDto": {
+      "id": "DrawGuessPlayerDto",
+      "class": "DrawGuessPlayerDto",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/DrawGuessPlayerDto.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "DrawGuessRoomResponse": {
+      "id": "DrawGuessRoomResponse",
+      "class": "DrawGuessRoomResponse",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/DrawGuessRoomResponse.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": [
+        "DrawGuessGameState"
+      ]
+    },
+    "DrawStrokeDto": {
+      "id": "DrawStrokeDto",
+      "class": "DrawStrokeDto",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/DrawStrokeDto.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": [
+        "StrokeType"
+      ]
+    },
+    "FinalGameResultDto": {
+      "id": "FinalGameResultDto",
+      "class": "FinalGameResultDto",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/FinalGameResultDto.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "GuessResultDto": {
+      "id": "GuessResultDto",
+      "class": "GuessResultDto",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/GuessResultDto.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "GuessSubmissionDto": {
+      "id": "GuessSubmissionDto",
+      "class": "GuessSubmissionDto",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/GuessSubmissionDto.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "JoinDrawGuessRoomRequest": {
+      "id": "JoinDrawGuessRoomRequest",
+      "class": "JoinDrawGuessRoomRequest",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/JoinDrawGuessRoomRequest.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "RestartDrawGuessRoomRequest": {
+      "id": "RestartDrawGuessRoomRequest",
+      "class": "RestartDrawGuessRoomRequest",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/RestartDrawGuessRoomRequest.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "RoundResultDto": {
+      "id": "RoundResultDto",
+      "class": "RoundResultDto",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/RoundResultDto.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "WordOptionDto": {
+      "id": "WordOptionDto",
+      "class": "WordOptionDto",
+      "package": "com.example.hr_management_backend.features.scribbil.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/dto/WordOptionDto.java",
+      "feature": "scribbil",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "DrawGuessGameState": {
+      "id": "DrawGuessGameState",
+      "class": "DrawGuessGameState",
+      "package": "com.example.hr_management_backend.features.scribbil.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/model/DrawGuessGameState.java",
+      "feature": "scribbil",
+      "layer": "model",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": []
+    },
+    "DrawGuessPlayer": {
+      "id": "DrawGuessPlayer",
+      "class": "DrawGuessPlayer",
+      "package": "com.example.hr_management_backend.features.scribbil.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/model/DrawGuessPlayer.java",
+      "feature": "scribbil",
+      "layer": "model",
+      "is_test": false,
+      "table": "draw_guess_players",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Getter",
+        "Table",
+        "Setter",
+        "Id",
+        "GeneratedValue"
+      ],
+      "dependencies": []
+    },
+    "DrawGuessRoom": {
+      "id": "DrawGuessRoom",
+      "class": "DrawGuessRoom",
+      "package": "com.example.hr_management_backend.features.scribbil.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/model/DrawGuessRoom.java",
+      "feature": "scribbil",
+      "layer": "model",
+      "is_test": false,
+      "table": "draw_guess_rooms",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Getter",
+        "Table",
+        "Setter",
+        "Id",
+        "GeneratedValue"
+      ],
+      "dependencies": []
+    },
+    "DrawGuessRound": {
+      "id": "DrawGuessRound",
+      "class": "DrawGuessRound",
+      "package": "com.example.hr_management_backend.features.scribbil.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/model/DrawGuessRound.java",
+      "feature": "scribbil",
+      "layer": "model",
+      "is_test": false,
+      "table": "draw_guess_rounds",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Getter",
+        "Table",
+        "Setter",
+        "Id",
+        "GeneratedValue"
+      ],
+      "dependencies": []
+    },
+    "DrawGuessScore": {
+      "id": "DrawGuessScore",
+      "class": "DrawGuessScore",
+      "package": "com.example.hr_management_backend.features.scribbil.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/model/DrawGuessScore.java",
+      "feature": "scribbil",
+      "layer": "model",
+      "is_test": false,
+      "table": "draw_guess_scores",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Getter",
+        "Table",
+        "Setter",
+        "Id",
+        "GeneratedValue"
+      ],
+      "dependencies": []
+    },
+    "DrawGuessWord": {
+      "id": "DrawGuessWord",
+      "class": "DrawGuessWord",
+      "package": "com.example.hr_management_backend.features.scribbil.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/model/DrawGuessWord.java",
+      "feature": "scribbil",
+      "layer": "model",
+      "is_test": false,
+      "table": "draw_guess_words",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Getter",
+        "Table",
+        "Setter",
+        "Id",
+        "GeneratedValue"
+      ],
+      "dependencies": []
+    },
+    "StrokeType": {
+      "id": "StrokeType",
+      "class": "StrokeType",
+      "package": "com.example.hr_management_backend.features.scribbil.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/model/StrokeType.java",
+      "feature": "scribbil",
+      "layer": "model",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": []
+    },
+    "DrawGuessPlayerRepository": {
+      "id": "DrawGuessPlayerRepository",
+      "class": "DrawGuessPlayerRepository",
+      "package": "com.example.hr_management_backend.features.scribbil.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/repository/DrawGuessPlayerRepository.java",
+      "feature": "scribbil",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "DrawGuessPlayer"
+      ]
+    },
+    "DrawGuessRoomRepository": {
+      "id": "DrawGuessRoomRepository",
+      "class": "DrawGuessRoomRepository",
+      "package": "com.example.hr_management_backend.features.scribbil.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/repository/DrawGuessRoomRepository.java",
+      "feature": "scribbil",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository",
+        "Query"
+      ],
+      "dependencies": [
+        "DrawGuessGameState",
+        "DrawGuessRoom"
+      ]
+    },
+    "DrawGuessRoundRepository": {
+      "id": "DrawGuessRoundRepository",
+      "class": "DrawGuessRoundRepository",
+      "package": "com.example.hr_management_backend.features.scribbil.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/repository/DrawGuessRoundRepository.java",
+      "feature": "scribbil",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "DrawGuessRound"
+      ]
+    },
+    "DrawGuessScoreRepository": {
+      "id": "DrawGuessScoreRepository",
+      "class": "DrawGuessScoreRepository",
+      "package": "com.example.hr_management_backend.features.scribbil.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/repository/DrawGuessScoreRepository.java",
+      "feature": "scribbil",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "DrawGuessScore"
+      ]
+    },
+    "DrawGuessWordRepository": {
+      "id": "DrawGuessWordRepository",
+      "class": "DrawGuessWordRepository",
+      "package": "com.example.hr_management_backend.features.scribbil.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/repository/DrawGuessWordRepository.java",
+      "feature": "scribbil",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository",
+        "Param",
+        "Query"
+      ],
+      "dependencies": [
+        "DrawGuessWord"
+      ]
+    },
+    "DrawGuessGameService": {
+      "id": "DrawGuessGameService",
+      "class": "DrawGuessGameService",
+      "package": "com.example.hr_management_backend.features.scribbil.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/service/DrawGuessGameService.java",
+      "feature": "scribbil",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": []
+    },
+    "DrawGuessGameServiceImpl": {
+      "id": "DrawGuessGameServiceImpl",
+      "class": "DrawGuessGameServiceImpl",
+      "package": "com.example.hr_management_backend.features.scribbil.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/service/DrawGuessGameServiceImpl.java",
+      "feature": "scribbil",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "DrawGuessWebSocketSessionManager",
+        "Employee",
+        "EmployeeRepository"
+      ]
+    },
+    "DrawGuessScoringEngine": {
+      "id": "DrawGuessScoringEngine",
+      "class": "DrawGuessScoringEngine",
+      "package": "com.example.hr_management_backend.features.scribbil.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/service/DrawGuessScoringEngine.java",
+      "feature": "scribbil",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Component",
+        "param",
+        "return"
+      ],
+      "dependencies": []
+    },
+    "WordDictionaryService": {
+      "id": "WordDictionaryService",
+      "class": "WordDictionaryService",
+      "package": "com.example.hr_management_backend.features.scribbil.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/service/WordDictionaryService.java",
+      "feature": "scribbil",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "RequiredArgsConstructor",
+        "Slf4j",
+        "org",
+        "PostConstruct"
+      ],
+      "dependencies": [
+        "DrawGuessWord",
+        "DrawGuessWordRepository",
+        "WordOptionDto"
+      ]
+    },
+    "DrawGuessWebSocketConfig": {
+      "id": "DrawGuessWebSocketConfig",
+      "class": "DrawGuessWebSocketConfig",
+      "package": "com.example.hr_management_backend.features.scribbil.websocket",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/websocket/DrawGuessWebSocketConfig.java",
+      "feature": "scribbil",
+      "layer": "websocket",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Configuration",
+        "Override",
+        "EnableWebSocket"
+      ],
+      "dependencies": []
+    },
+    "DrawGuessWebSocketHandler": {
+      "id": "DrawGuessWebSocketHandler",
+      "class": "DrawGuessWebSocketHandler",
+      "package": "com.example.hr_management_backend.features.scribbil.websocket",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/websocket/DrawGuessWebSocketHandler.java",
+      "feature": "scribbil",
+      "layer": "websocket",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Lazy",
+        "Override",
+        "Slf4j",
+        "Component"
+      ],
+      "dependencies": [
+        "DrawGuessGameService",
+        "DrawGuessRoom",
+        "DrawGuessRoomRepository",
+        "DrawStrokeDto",
+        "Employee",
+        "EmployeeRepository",
+        "JwtUtils",
+        "StrokeType"
+      ]
+    },
+    "DrawGuessWebSocketSessionManager": {
+      "id": "DrawGuessWebSocketSessionManager",
+      "class": "DrawGuessWebSocketSessionManager",
+      "package": "com.example.hr_management_backend.features.scribbil.websocket",
+      "path": "src/main/java/com/example/hr_management_backend/features/scribbil/websocket/DrawGuessWebSocketSessionManager.java",
+      "feature": "scribbil",
+      "layer": "websocket",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Slf4j",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "SettingsController": {
+      "id": "SettingsController",
+      "class": "SettingsController",
+      "package": "com.example.hr_management_backend.features.settings.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/settings/controller/SettingsController.java",
+      "feature": "settings",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "/api/settings",
+      "annotations": [
+        "RequestMapping",
+        "RequestBody",
+        "RequestParam",
+        "Autowired",
+        "PathVariable",
+        "GetMapping",
+        "PutMapping",
+        "RestController"
+      ],
+      "dependencies": [
+        "SettingsService"
+      ]
+    },
+    "Setting": {
+      "id": "Setting",
+      "class": "Setting",
+      "package": "com.example.hr_management_backend.features.settings.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/settings/model/Setting.java",
+      "feature": "settings",
+      "layer": "model",
+      "is_test": false,
+      "table": "settings",
+      "base_endpoint": "",
+      "annotations": [
+        "Entity",
+        "Table",
+        "Id"
+      ],
+      "dependencies": []
+    },
+    "SettingRepository": {
+      "id": "SettingRepository",
+      "class": "SettingRepository",
+      "package": "com.example.hr_management_backend.features.settings.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/settings/repository/SettingRepository.java",
+      "feature": "settings",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "Setting"
+      ]
+    },
+    "SettingsService": {
+      "id": "SettingsService",
+      "class": "SettingsService",
+      "package": "com.example.hr_management_backend.features.settings.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/settings/service/SettingsService.java",
+      "feature": "settings",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Service",
+        "PostConstruct",
+        "Autowired"
+      ],
+      "dependencies": [
+        "Setting",
+        "SettingRepository"
+      ]
+    },
+    "TambolaController": {
+      "id": "TambolaController",
+      "class": "TambolaController",
+      "package": "com.example.hr_management_backend.features.tambola.controller",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/controller/TambolaController.java",
+      "feature": "tambola",
+      "layer": "controller",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "CrossOrigin",
+        "RequestMapping",
+        "RequestBody",
+        "RequestHeader",
+        "Slf4j",
+        "PathVariable",
+        "PostMapping",
+        "GetMapping",
+        "RequiredArgsConstructor",
+        "RestController"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "TambolaGameService"
+      ]
+    },
+    "CreateTambolaGameDto": {
+      "id": "CreateTambolaGameDto",
+      "class": "CreateTambolaGameDto",
+      "package": "com.example.hr_management_backend.features.tambola.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/dto/CreateTambolaGameDto.java",
+      "feature": "tambola",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaClaimRequestDto": {
+      "id": "TambolaClaimRequestDto",
+      "class": "TambolaClaimRequestDto",
+      "package": "com.example.hr_management_backend.features.tambola.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/dto/TambolaClaimRequestDto.java",
+      "feature": "tambola",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "NoArgsConstructor",
+        "AllArgsConstructor",
+        "NotBlank",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaClaimResultDto": {
+      "id": "TambolaClaimResultDto",
+      "class": "TambolaClaimResultDto",
+      "package": "com.example.hr_management_backend.features.tambola.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/dto/TambolaClaimResultDto.java",
+      "feature": "tambola",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaDrawResponseDto": {
+      "id": "TambolaDrawResponseDto",
+      "class": "TambolaDrawResponseDto",
+      "package": "com.example.hr_management_backend.features.tambola.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/dto/TambolaDrawResponseDto.java",
+      "feature": "tambola",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaGameResponseDto": {
+      "id": "TambolaGameResponseDto",
+      "class": "TambolaGameResponseDto",
+      "package": "com.example.hr_management_backend.features.tambola.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/dto/TambolaGameResponseDto.java",
+      "feature": "tambola",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "AllArgsConstructor",
+        "Builder",
+        "NoArgsConstructor",
+        "com",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaPlayerDto": {
+      "id": "TambolaPlayerDto",
+      "class": "TambolaPlayerDto",
+      "package": "com.example.hr_management_backend.features.tambola.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/dto/TambolaPlayerDto.java",
+      "feature": "tambola",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaStateDto": {
+      "id": "TambolaStateDto",
+      "class": "TambolaStateDto",
+      "package": "com.example.hr_management_backend.features.tambola.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/dto/TambolaStateDto.java",
+      "feature": "tambola",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "AllArgsConstructor",
+        "Builder",
+        "NoArgsConstructor",
+        "com",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaTicketDto": {
+      "id": "TambolaTicketDto",
+      "class": "TambolaTicketDto",
+      "package": "com.example.hr_management_backend.features.tambola.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/dto/TambolaTicketDto.java",
+      "feature": "tambola",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaWinnerDto": {
+      "id": "TambolaWinnerDto",
+      "class": "TambolaWinnerDto",
+      "package": "com.example.hr_management_backend.features.tambola.dto",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/dto/TambolaWinnerDto.java",
+      "feature": "tambola",
+      "layer": "dto",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Builder",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaDraw": {
+      "id": "TambolaDraw",
+      "class": "TambolaDraw",
+      "package": "com.example.hr_management_backend.features.tambola.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/model/TambolaDraw.java",
+      "feature": "tambola",
+      "layer": "model",
+      "is_test": false,
+      "table": "tambola_draws",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaGame": {
+      "id": "TambolaGame",
+      "class": "TambolaGame",
+      "package": "com.example.hr_management_backend.features.tambola.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/model/TambolaGame.java",
+      "feature": "tambola",
+      "layer": "model",
+      "is_test": false,
+      "table": "tambola_games",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaPlayer": {
+      "id": "TambolaPlayer",
+      "class": "TambolaPlayer",
+      "package": "com.example.hr_management_backend.features.tambola.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/model/TambolaPlayer.java",
+      "feature": "tambola",
+      "layer": "model",
+      "is_test": false,
+      "table": "tambola_players",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaTicket": {
+      "id": "TambolaTicket",
+      "class": "TambolaTicket",
+      "package": "com.example.hr_management_backend.features.tambola.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/model/TambolaTicket.java",
+      "feature": "tambola",
+      "layer": "model",
+      "is_test": false,
+      "table": "tambola_tickets",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaWinner": {
+      "id": "TambolaWinner",
+      "class": "TambolaWinner",
+      "package": "com.example.hr_management_backend.features.tambola.model",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/model/TambolaWinner.java",
+      "feature": "tambola",
+      "layer": "model",
+      "is_test": false,
+      "table": "tambola_winners",
+      "base_endpoint": "",
+      "annotations": [
+        "Column",
+        "AllArgsConstructor",
+        "UniqueConstraint",
+        "NoArgsConstructor",
+        "Builder",
+        "Index",
+        "Entity",
+        "Table",
+        "Id",
+        "GeneratedValue",
+        "Data"
+      ],
+      "dependencies": []
+    },
+    "TambolaDrawRepository": {
+      "id": "TambolaDrawRepository",
+      "class": "TambolaDrawRepository",
+      "package": "com.example.hr_management_backend.features.tambola.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/repository/TambolaDrawRepository.java",
+      "feature": "tambola",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "TambolaDraw"
+      ]
+    },
+    "TambolaGameRepository": {
+      "id": "TambolaGameRepository",
+      "class": "TambolaGameRepository",
+      "package": "com.example.hr_management_backend.features.tambola.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/repository/TambolaGameRepository.java",
+      "feature": "tambola",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Lock",
+        "Repository",
+        "Param",
+        "Query"
+      ],
+      "dependencies": [
+        "TambolaGame"
+      ]
+    },
+    "TambolaPlayerRepository": {
+      "id": "TambolaPlayerRepository",
+      "class": "TambolaPlayerRepository",
+      "package": "com.example.hr_management_backend.features.tambola.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/repository/TambolaPlayerRepository.java",
+      "feature": "tambola",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "TambolaPlayer"
+      ]
+    },
+    "TambolaTicketRepository": {
+      "id": "TambolaTicketRepository",
+      "class": "TambolaTicketRepository",
+      "package": "com.example.hr_management_backend.features.tambola.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/repository/TambolaTicketRepository.java",
+      "feature": "tambola",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "TambolaTicket"
+      ]
+    },
+    "TambolaWinnerRepository": {
+      "id": "TambolaWinnerRepository",
+      "class": "TambolaWinnerRepository",
+      "package": "com.example.hr_management_backend.features.tambola.repository",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/repository/TambolaWinnerRepository.java",
+      "feature": "tambola",
+      "layer": "repository",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Repository"
+      ],
+      "dependencies": [
+        "TambolaWinner"
+      ]
+    },
+    "TambolaGameService": {
+      "id": "TambolaGameService",
+      "class": "TambolaGameService",
+      "package": "com.example.hr_management_backend.features.tambola.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/service/TambolaGameService.java",
+      "feature": "tambola",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [],
+      "dependencies": []
+    },
+    "TambolaGameServiceImpl": {
+      "id": "TambolaGameServiceImpl",
+      "class": "TambolaGameServiceImpl",
+      "package": "com.example.hr_management_backend.features.tambola.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/service/TambolaGameServiceImpl.java",
+      "feature": "tambola",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Override",
+        "Service",
+        "Transactional",
+        "Slf4j",
+        "RequiredArgsConstructor"
+      ],
+      "dependencies": [
+        "CompanyGameService",
+        "Employee",
+        "EmployeeRepository",
+        "TambolaWebSocketSessionManager"
+      ]
+    },
+    "TambolaTicketGenerator": {
+      "id": "TambolaTicketGenerator",
+      "class": "TambolaTicketGenerator",
+      "package": "com.example.hr_management_backend.features.tambola.service",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/service/TambolaTicketGenerator.java",
+      "feature": "tambola",
+      "layer": "service",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Getter",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "TambolaWebSocketConfig": {
+      "id": "TambolaWebSocketConfig",
+      "class": "TambolaWebSocketConfig",
+      "package": "com.example.hr_management_backend.features.tambola.websocket",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/websocket/TambolaWebSocketConfig.java",
+      "feature": "tambola",
+      "layer": "websocket",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Configuration",
+        "Override",
+        "EnableWebSocket"
+      ],
+      "dependencies": []
+    },
+    "TambolaWebSocketHandler": {
+      "id": "TambolaWebSocketHandler",
+      "class": "TambolaWebSocketHandler",
+      "package": "com.example.hr_management_backend.features.tambola.websocket",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/websocket/TambolaWebSocketHandler.java",
+      "feature": "tambola",
+      "layer": "websocket",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Override",
+        "Slf4j",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "TambolaWebSocketSessionManager": {
+      "id": "TambolaWebSocketSessionManager",
+      "class": "TambolaWebSocketSessionManager",
+      "package": "com.example.hr_management_backend.features.tambola.websocket",
+      "path": "src/main/java/com/example/hr_management_backend/features/tambola/websocket/TambolaWebSocketSessionManager.java",
+      "feature": "tambola",
+      "layer": "websocket",
+      "is_test": false,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "RequiredArgsConstructor",
+        "Slf4j",
+        "Component"
+      ],
+      "dependencies": []
+    },
+    "ExcelParseTest": {
+      "id": "ExcelParseTest",
+      "class": "ExcelParseTest",
+      "package": "com.example.hr_management_backend",
+      "path": "src/test/java/com/example/hr_management_backend/ExcelParseTest.java",
+      "feature": "core",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Test"
+      ],
+      "dependencies": []
+    },
+    "HrManagementApplicationTests": {
+      "id": "HrManagementApplicationTests",
+      "class": "HrManagementApplicationTests",
+      "package": "com.example.hr_management_backend",
+      "path": "src/test/java/com/example/hr_management_backend/HrManagementApplicationTests.java",
+      "feature": "core",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Test",
+        "SpringBootTest"
+      ],
+      "dependencies": []
+    },
+    "LeavePolicyAndCancellationTest": {
+      "id": "LeavePolicyAndCancellationTest",
+      "class": "LeavePolicyAndCancellationTest",
+      "package": "com.example.hr_management_backend",
+      "path": "src/test/java/com/example/hr_management_backend/LeavePolicyAndCancellationTest.java",
+      "feature": "core",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Autowired",
+        "Test",
+        "BeforeEach",
+        "DisplayName",
+        "SpringBootTest",
+        "company"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "LeaveBalance",
+        "LeaveBalanceRepository",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "LeaveService"
+      ]
+    },
+    "LeavePolicyTest": {
+      "id": "LeavePolicyTest",
+      "class": "LeavePolicyTest",
+      "package": "com.example.hr_management_backend",
+      "path": "src/test/java/com/example/hr_management_backend/LeavePolicyTest.java",
+      "feature": "core",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Transactional",
+        "Autowired",
+        "Test",
+        "BeforeEach",
+        "DisplayName",
+        "SpringBootTest",
+        "company"
+      ],
+      "dependencies": [
+        "Employee",
+        "LeaveBalance",
+        "LeaveBalanceRepository",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "LeaveService"
+      ]
+    },
+    "ManualTesterLeaveFlowTest": {
+      "id": "ManualTesterLeaveFlowTest",
+      "class": "ManualTesterLeaveFlowTest",
+      "package": "com.example.hr_management_backend",
+      "path": "src/test/java/com/example/hr_management_backend/ManualTesterLeaveFlowTest.java",
+      "feature": "core",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Transactional",
+        "Autowired",
+        "Test",
+        "DisplayName",
+        "SpringBootTest"
+      ],
+      "dependencies": [
+        "LeaveBalance",
+        "LeaveRequest",
+        "LeaveService"
+      ]
+    },
+    "MultiScenarioLeaveSeederTest": {
+      "id": "MultiScenarioLeaveSeederTest",
+      "class": "MultiScenarioLeaveSeederTest",
+      "package": "com.example.hr_management_backend",
+      "path": "src/test/java/com/example/hr_management_backend/MultiScenarioLeaveSeederTest.java",
+      "feature": "core",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Autowired",
+        "Test",
+        "DisplayName",
+        "SpringBootTest",
+        "company"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "LeaveRequest",
+        "LeaveService"
+      ]
+    },
+    "JwtUtilsTest": {
+      "id": "JwtUtilsTest",
+      "class": "JwtUtilsTest",
+      "package": "com.example.hr_management_backend.core.security",
+      "path": "src/test/java/com/example/hr_management_backend/core/security/JwtUtilsTest.java",
+      "feature": "core",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "company",
+        "Test",
+        "BeforeEach"
+      ],
+      "dependencies": []
+    },
+    "AuthServiceImplTest": {
+      "id": "AuthServiceImplTest",
+      "class": "AuthServiceImplTest",
+      "package": "com.example.hr_management_backend.features.auth.service",
+      "path": "src/test/java/com/example/hr_management_backend/features/auth/service/AuthServiceImplTest.java",
+      "feature": "auth",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "ExtendWith",
+        "example",
+        "Test",
+        "BeforeEach",
+        "Mock",
+        "InjectMocks"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "JwtUtils",
+        "LoginRequest",
+        "LoginResponse",
+        "RegisterRequest",
+        "User",
+        "UserRepository"
+      ]
+    },
+    "EnterpriseRbacTest": {
+      "id": "EnterpriseRbacTest",
+      "class": "EnterpriseRbacTest",
+      "package": "com.example.hr_management_backend.features.employees",
+      "path": "src/test/java/com/example/hr_management_backend/features/employees/EnterpriseRbacTest.java",
+      "feature": "employees",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Transactional",
+        "Autowired",
+        "BeforeEach",
+        "ActiveProfiles",
+        "SpringBootTest",
+        "company"
+      ],
+      "dependencies": [
+        "CustomUserDetailsService",
+        "ElevateEmployeeDto",
+        "Employee",
+        "EmployeeAuthorityRepository",
+        "EmployeeDetailDto",
+        "EmployeeRepository",
+        "EmployeeService",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "LeaveService",
+        "User",
+        "UserRepository"
+      ]
+    },
+    "HolidaySystemIntegrationTest": {
+      "id": "HolidaySystemIntegrationTest",
+      "class": "HolidaySystemIntegrationTest",
+      "package": "com.example.hr_management_backend.features.holidays",
+      "path": "src/test/java/com/example/hr_management_backend/features/holidays/HolidaySystemIntegrationTest.java",
+      "feature": "holidays",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Autowired",
+        "Test",
+        "BeforeEach",
+        "SpringBootTest",
+        "company"
+      ],
+      "dependencies": [
+        "AttendanceCalendarDayDto",
+        "AttendanceService",
+        "Employee",
+        "EmployeeHolidayCalendarDto",
+        "EmployeeRepository",
+        "Holiday",
+        "HolidayDto",
+        "HolidayList",
+        "HolidayListDto",
+        "HolidayListRepository",
+        "HolidayRepository",
+        "HolidayService",
+        "LeaveBalance",
+        "LeaveBalanceRepository",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "LeaveService"
+      ]
+    },
+    "LeaveAttendanceSyncTest": {
+      "id": "LeaveAttendanceSyncTest",
+      "class": "LeaveAttendanceSyncTest",
+      "package": "com.example.hr_management_backend.features.leaves",
+      "path": "src/test/java/com/example/hr_management_backend/features/leaves/LeaveAttendanceSyncTest.java",
+      "feature": "leaves",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Transactional",
+        "Autowired",
+        "Test",
+        "ActiveProfiles",
+        "DisplayName",
+        "SpringBootTest",
+        "company"
+      ],
+      "dependencies": [
+        "Attendance",
+        "AttendanceRepository",
+        "AttendanceService",
+        "Employee",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "LeaveService"
+      ]
+    },
+    "LeaveCarryoverAndAccrualTest": {
+      "id": "LeaveCarryoverAndAccrualTest",
+      "class": "LeaveCarryoverAndAccrualTest",
+      "package": "com.example.hr_management_backend.features.leaves",
+      "path": "src/test/java/com/example/hr_management_backend/features/leaves/LeaveCarryoverAndAccrualTest.java",
+      "feature": "leaves",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Transactional",
+        "Autowired",
+        "Test",
+        "BeforeEach",
+        "DisplayName",
+        "SpringBootTest",
+        "company"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "LeaveAccrualService",
+        "LeaveBalance",
+        "LeaveBalanceRepository",
+        "LeaveCarryoverService",
+        "LeaveRequestRepository",
+        "LeaveService"
+      ]
+    },
+    "LeaveConcurrencyTest": {
+      "id": "LeaveConcurrencyTest",
+      "class": "LeaveConcurrencyTest",
+      "package": "com.example.hr_management_backend.features.leaves",
+      "path": "src/test/java/com/example/hr_management_backend/features/leaves/LeaveConcurrencyTest.java",
+      "feature": "leaves",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "test",
+        "Autowired",
+        "Test",
+        "BeforeEach",
+        "DisplayName",
+        "SpringBootTest"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "LeaveBalance",
+        "LeaveBalanceRepository",
+        "LeaveRequest",
+        "LeaveRequestRepository",
+        "LeaveService"
+      ]
+    },
+    "LeaveSecurityTest": {
+      "id": "LeaveSecurityTest",
+      "class": "LeaveSecurityTest",
+      "package": "com.example.hr_management_backend.features.leaves",
+      "path": "src/test/java/com/example/hr_management_backend/features/leaves/LeaveSecurityTest.java",
+      "feature": "leaves",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "WithMockUser",
+        "Autowired",
+        "Test",
+        "BeforeEach",
+        "SpringBootTest",
+        "company"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "LeaveController",
+        "LeaveRequest",
+        "LeaveRequestRepository"
+      ]
+    },
+    "SandwichLeavePolicyTest": {
+      "id": "SandwichLeavePolicyTest",
+      "class": "SandwichLeavePolicyTest",
+      "package": "com.example.hr_management_backend.features.leaves",
+      "path": "src/test/java/com/example/hr_management_backend/features/leaves/SandwichLeavePolicyTest.java",
+      "feature": "leaves",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Transactional",
+        "Autowired",
+        "Test",
+        "BeforeEach",
+        "DisplayName",
+        "SpringBootTest"
+      ],
+      "dependencies": [
+        "Holiday",
+        "HolidayList",
+        "HolidayListRepository",
+        "HolidayRepository",
+        "LeaveRequest",
+        "LeaveService"
+      ]
+    },
+    "PayrollProcessingServiceTest": {
+      "id": "PayrollProcessingServiceTest",
+      "class": "PayrollProcessingServiceTest",
+      "package": "com.example.hr_management_backend.features.payroll",
+      "path": "src/test/java/com/example/hr_management_backend/features/payroll/PayrollProcessingServiceTest.java",
+      "feature": "payroll",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Transactional",
+        "Autowired",
+        "Test",
+        "BeforeEach",
+        "ActiveProfiles",
+        "SpringBootTest",
+        "company",
+        "DisplayName"
+      ],
+      "dependencies": [
+        "BankPayoutExportService",
+        "Employee",
+        "EmployeeRepository",
+        "PayrollProcessingService",
+        "PayrollStatus"
+      ]
+    },
+    "DrawGuessGameServiceTest": {
+      "id": "DrawGuessGameServiceTest",
+      "class": "DrawGuessGameServiceTest",
+      "package": "com.example.hr_management_backend.features.scribbil",
+      "path": "src/test/java/com/example/hr_management_backend/features/scribbil/DrawGuessGameServiceTest.java",
+      "feature": "scribbil",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "ExtendWith",
+        "Test",
+        "BeforeEach",
+        "DisplayName",
+        "company",
+        "Mock",
+        "InjectMocks"
+      ],
+      "dependencies": [
+        "DrawGuessWebSocketSessionManager",
+        "Employee",
+        "EmployeeRepository"
+      ]
+    },
+    "DrawGuessScoringEngineTest": {
+      "id": "DrawGuessScoringEngineTest",
+      "class": "DrawGuessScoringEngineTest",
+      "package": "com.example.hr_management_backend.features.scribbil",
+      "path": "src/test/java/com/example/hr_management_backend/features/scribbil/DrawGuessScoringEngineTest.java",
+      "feature": "scribbil",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "DisplayName",
+        "Test",
+        "BeforeEach"
+      ],
+      "dependencies": [
+        "DrawGuessScoringEngine"
+      ]
+    },
+    "TambolaGameFlowTest": {
+      "id": "TambolaGameFlowTest",
+      "class": "TambolaGameFlowTest",
+      "package": "com.example.hr_management_backend.features.tambola",
+      "path": "src/test/java/com/example/hr_management_backend/features/tambola/TambolaGameFlowTest.java",
+      "feature": "tambola",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Transactional",
+        "Autowired",
+        "Test",
+        "BeforeEach",
+        "DisplayName",
+        "SpringBootTest",
+        "example"
+      ],
+      "dependencies": [
+        "Employee",
+        "EmployeeRepository",
+        "TambolaDraw",
+        "TambolaDrawRepository",
+        "TambolaGame",
+        "TambolaGameRepository",
+        "TambolaGameService"
+      ]
+    },
+    "TambolaTicketGeneratorTest": {
+      "id": "TambolaTicketGeneratorTest",
+      "class": "TambolaTicketGeneratorTest",
+      "package": "com.example.hr_management_backend.features.tambola",
+      "path": "src/test/java/com/example/hr_management_backend/features/tambola/TambolaTicketGeneratorTest.java",
+      "feature": "tambola",
+      "layer": "test",
+      "is_test": true,
+      "table": null,
+      "base_endpoint": "",
+      "annotations": [
+        "Test",
+        "BeforeEach"
+      ],
+      "dependencies": [
+        "TambolaTicketGenerator"
+      ]
+    }
+  },
+  "edges": [
+    {
+      "from": "HrManagementApplication",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HrManagementApplication",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HrManagementApplication",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HrManagementApplication",
+      "to": "UserRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "Attendance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "AttendanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DataInitializer",
+      "to": "UserRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "CustomUserDetailsService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "CustomUserDetailsService",
+      "to": "EmployeeAuthorityRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "CustomUserDetailsService",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "CustomUserDetailsService",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "CustomUserDetailsService",
+      "to": "UserRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceController",
+      "to": "Attendance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceController",
+      "to": "AttendanceCalendarDayDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceController",
+      "to": "AttendanceService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveEventListener",
+      "to": "AttendanceService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveEventListener",
+      "to": "LeaveApprovedEvent",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveEventListener",
+      "to": "LeaveWithdrawnEvent",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceRepository",
+      "to": "Attendance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "Attendance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "AttendanceCalendarDayDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "AttendanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "BiometricImportRowDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "BiometricImportSummaryDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AttendanceService",
+      "to": "SettingsService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthController",
+      "to": "AuthService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthController",
+      "to": "LoginRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthController",
+      "to": "LoginResponse",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthController",
+      "to": "RegisterRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthController",
+      "to": "UpdateRoleDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthController",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PasswordResetTokenRepository",
+      "to": "PasswordResetToken",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "UserActivationTokenRepository",
+      "to": "UserActivationToken",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "UserRepository",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthService",
+      "to": "LoginRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthService",
+      "to": "LoginResponse",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthService",
+      "to": "RegisterRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthService",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "EmailOutboxService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "JwtUtils",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "LoginRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "LoginResponse",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "PasswordResetToken",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "PasswordResetTokenRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "RegisterRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "UserActivationToken",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "UserActivationTokenRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImpl",
+      "to": "UserRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DashboardController",
+      "to": "DashboardService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DashboardController",
+      "to": "DashboardStatsResponse",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DashboardService",
+      "to": "DashboardStatsResponse",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DashboardServiceImpl",
+      "to": "AttendanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DashboardServiceImpl",
+      "to": "DashboardStatsResponse",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DashboardServiceImpl",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DashboardServiceImpl",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmailOutboxRepository",
+      "to": "EmailOutbox",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmailOutboxService",
+      "to": "EmailOutbox",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmailOutboxService",
+      "to": "EmailOutboxRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "OutboxDispatcherService",
+      "to": "EmailOutbox",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "OutboxDispatcherService",
+      "to": "EmailOutboxRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "OutboxDispatcherService",
+      "to": "PostmarkClient",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeController",
+      "to": "AssignManagerDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeController",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeController",
+      "to": "EmployeeDetailDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeController",
+      "to": "EmployeeService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeController",
+      "to": "EmployeeSummaryDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeController",
+      "to": "StarredPeerRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeAuthorityRepository",
+      "to": "EmployeeAuthority",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeRepository",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "StarredPeerRepository",
+      "to": "StarredPeer",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeService",
+      "to": "EmployeeDetailDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeService",
+      "to": "EmployeeSummaryDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "Attendance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "AttendanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "ElevateEmployeeDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "EmailOutboxService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "EmployeeAuthority",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "EmployeeAuthorityRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "EmployeeDetailDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "EmployeeSummaryDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "ResourceNotFoundException",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "UserActivationTokenRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeServiceImpl",
+      "to": "UserRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "GameController",
+      "to": "CompanyGame",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "GameController",
+      "to": "CompanyGameService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "CompanyGameRepository",
+      "to": "CompanyGame",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "CompanyGameService",
+      "to": "CompanyGame",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "CompanyGameServiceImpl",
+      "to": "CompanyGame",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "CompanyGameServiceImpl",
+      "to": "CompanyGameRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayController",
+      "to": "AuthService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayController",
+      "to": "EmployeeHolidayCalendarDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayController",
+      "to": "Holiday",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayController",
+      "to": "HolidayList",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayController",
+      "to": "HolidayListDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayController",
+      "to": "HolidayService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayController",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayListRepository",
+      "to": "HolidayList",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayRepository",
+      "to": "Holiday",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "EmployeeHolidayCalendarDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "Holiday",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "HolidayDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "HolidayList",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "HolidayListDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "HolidayListRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "HolidayRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayService",
+      "to": "SettingsService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveController",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveController",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveController",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyEngine",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyEngine",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyRule",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyRule",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "FutureExtensibilityHookRule",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "FutureExtensibilityHookRule",
+      "to": "LeavePolicyRule",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "FutureExtensibilityHookRule",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayLeavePolicyRule",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayLeavePolicyRule",
+      "to": "Holiday",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayLeavePolicyRule",
+      "to": "HolidayRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayLeavePolicyRule",
+      "to": "LeavePolicyRule",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayLeavePolicyRule",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidayLeavePolicyRule",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "QuotaValidationRule",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "QuotaValidationRule",
+      "to": "EmployeeLeaveQuotaRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "QuotaValidationRule",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "QuotaValidationRule",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "QuotaValidationRule",
+      "to": "LeavePolicyRule",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "QuotaValidationRule",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SessionOverlapRule",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SessionOverlapRule",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SessionOverlapRule",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ShortLeaveQuotaRule",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ShortLeaveQuotaRule",
+      "to": "LeavePolicyRule",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ShortLeaveQuotaRule",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ShortLeaveQuotaRule",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EmployeeLeaveQuotaRepository",
+      "to": "EmployeeLeaveQuota",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveBalanceRepository",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveRequestRepository",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveAccrualService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveAccrualService",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverService",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverService",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverService",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverService",
+      "to": "SettingsService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "Attendance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "AttendanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "EmployeeLeaveQuota",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "EmployeeLeaveQuotaRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "LeaveApprovedEvent",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "LeaveRequestDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "LeaveWithdrawnEvent",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveService",
+      "to": "SettingsService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ArrearsService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ArrearsService",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ArrearsService",
+      "to": "PayrollRecord",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ArrearsService",
+      "to": "PayrollRecordRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ArrearsService",
+      "to": "PayrollStatus",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ArrearsService",
+      "to": "SalaryStructure",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ArrearsService",
+      "to": "SalaryStructureRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "BankPayoutExportService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "BankPayoutExportService",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "BankPayoutExportService",
+      "to": "PayrollRecord",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "BankPayoutExportService",
+      "to": "PayrollRecordRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "BankPayoutExportService",
+      "to": "PayrollStatus",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollController",
+      "to": "ArrearsDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollController",
+      "to": "ArrearsService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollController",
+      "to": "BankPayoutExportService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollController",
+      "to": "Payroll",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollController",
+      "to": "PayrollProcessingService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollController",
+      "to": "PayrollReconciliationReportDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollController",
+      "to": "PayrollReconciliationService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollController",
+      "to": "PayrollService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollRecordDto",
+      "to": "PayrollStatus",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollReconciliationService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollReconciliationService",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollReconciliationService",
+      "to": "PayrollRecord",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollReconciliationService",
+      "to": "PayrollRecordRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "MonthlyPayrollInputRepository",
+      "to": "MonthlyPayrollInput",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollRecordRepository",
+      "to": "PayrollRecord",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollRecordRepository",
+      "to": "PayrollStatus",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollRepository",
+      "to": "Payroll",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SalaryStructureRepository",
+      "to": "SalaryStructure",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "ArrearsService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "Attendance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "AttendanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "Holiday",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "HolidayRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "TaxCalculatorFactory",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "TaxDeclarationDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingService",
+      "to": "TaxRegime",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollService",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollService",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollService",
+      "to": "Payroll",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollService",
+      "to": "PayrollRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PerformanceController",
+      "to": "PerformanceReview",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PerformanceController",
+      "to": "PerformanceService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PerformanceReviewRepository",
+      "to": "PerformanceReview",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PerformanceService",
+      "to": "PerformanceReview",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PerformanceService",
+      "to": "PerformanceReviewRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "RecruitmentController",
+      "to": "JobPosting",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "RecruitmentController",
+      "to": "RecruitmentService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "JobPostingRepository",
+      "to": "JobPosting",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "RecruitmentService",
+      "to": "JobPosting",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "RecruitmentService",
+      "to": "JobPostingRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessController",
+      "to": "DrawGuessGameService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessController",
+      "to": "WordDictionaryService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessGameStateDto",
+      "to": "DrawGuessGameState",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessRoomResponse",
+      "to": "DrawGuessGameState",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawStrokeDto",
+      "to": "StrokeType",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessPlayerRepository",
+      "to": "DrawGuessPlayer",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessRoomRepository",
+      "to": "DrawGuessGameState",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessRoomRepository",
+      "to": "DrawGuessRoom",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessRoundRepository",
+      "to": "DrawGuessRound",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessScoreRepository",
+      "to": "DrawGuessScore",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessWordRepository",
+      "to": "DrawGuessWord",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessGameServiceImpl",
+      "to": "DrawGuessWebSocketSessionManager",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessGameServiceImpl",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessGameServiceImpl",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "WordDictionaryService",
+      "to": "DrawGuessWord",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "WordDictionaryService",
+      "to": "DrawGuessWordRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "WordDictionaryService",
+      "to": "WordOptionDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessWebSocketHandler",
+      "to": "DrawGuessGameService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessWebSocketHandler",
+      "to": "DrawGuessRoom",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessWebSocketHandler",
+      "to": "DrawGuessRoomRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessWebSocketHandler",
+      "to": "DrawStrokeDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessWebSocketHandler",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessWebSocketHandler",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessWebSocketHandler",
+      "to": "JwtUtils",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessWebSocketHandler",
+      "to": "StrokeType",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SettingsController",
+      "to": "SettingsService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SettingRepository",
+      "to": "Setting",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SettingsService",
+      "to": "Setting",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SettingsService",
+      "to": "SettingRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaController",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaController",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaController",
+      "to": "TambolaGameService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaDrawRepository",
+      "to": "TambolaDraw",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameRepository",
+      "to": "TambolaGame",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaPlayerRepository",
+      "to": "TambolaPlayer",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaTicketRepository",
+      "to": "TambolaTicket",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaWinnerRepository",
+      "to": "TambolaWinner",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameServiceImpl",
+      "to": "CompanyGameService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameServiceImpl",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameServiceImpl",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameServiceImpl",
+      "to": "TambolaWebSocketSessionManager",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyAndCancellationTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyAndCancellationTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyAndCancellationTest",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyAndCancellationTest",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyAndCancellationTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyAndCancellationTest",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyAndCancellationTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyTest",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyTest",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyTest",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeavePolicyTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ManualTesterLeaveFlowTest",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ManualTesterLeaveFlowTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "ManualTesterLeaveFlowTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "MultiScenarioLeaveSeederTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "MultiScenarioLeaveSeederTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "MultiScenarioLeaveSeederTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "MultiScenarioLeaveSeederTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImplTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImplTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImplTest",
+      "to": "JwtUtils",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImplTest",
+      "to": "LoginRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImplTest",
+      "to": "LoginResponse",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImplTest",
+      "to": "RegisterRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImplTest",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "AuthServiceImplTest",
+      "to": "UserRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "CustomUserDetailsService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "ElevateEmployeeDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "EmployeeAuthorityRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "EmployeeDetailDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "EmployeeService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "User",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "EnterpriseRbacTest",
+      "to": "UserRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "AttendanceCalendarDayDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "AttendanceService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "EmployeeHolidayCalendarDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "Holiday",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "HolidayDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "HolidayList",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "HolidayListDto",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "HolidayListRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "HolidayRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "HolidayService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "HolidaySystemIntegrationTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveAttendanceSyncTest",
+      "to": "Attendance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveAttendanceSyncTest",
+      "to": "AttendanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveAttendanceSyncTest",
+      "to": "AttendanceService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveAttendanceSyncTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveAttendanceSyncTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveAttendanceSyncTest",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveAttendanceSyncTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverAndAccrualTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverAndAccrualTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverAndAccrualTest",
+      "to": "LeaveAccrualService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverAndAccrualTest",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverAndAccrualTest",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverAndAccrualTest",
+      "to": "LeaveCarryoverService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverAndAccrualTest",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveCarryoverAndAccrualTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveConcurrencyTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveConcurrencyTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveConcurrencyTest",
+      "to": "LeaveBalance",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveConcurrencyTest",
+      "to": "LeaveBalanceRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveConcurrencyTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveConcurrencyTest",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveConcurrencyTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveSecurityTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveSecurityTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveSecurityTest",
+      "to": "LeaveController",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveSecurityTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "LeaveSecurityTest",
+      "to": "LeaveRequestRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SandwichLeavePolicyTest",
+      "to": "Holiday",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SandwichLeavePolicyTest",
+      "to": "HolidayList",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SandwichLeavePolicyTest",
+      "to": "HolidayListRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SandwichLeavePolicyTest",
+      "to": "HolidayRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SandwichLeavePolicyTest",
+      "to": "LeaveRequest",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "SandwichLeavePolicyTest",
+      "to": "LeaveService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingServiceTest",
+      "to": "BankPayoutExportService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingServiceTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingServiceTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingServiceTest",
+      "to": "PayrollProcessingService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "PayrollProcessingServiceTest",
+      "to": "PayrollStatus",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessGameServiceTest",
+      "to": "DrawGuessWebSocketSessionManager",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessGameServiceTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessGameServiceTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "DrawGuessScoringEngineTest",
+      "to": "DrawGuessScoringEngine",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameFlowTest",
+      "to": "Employee",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameFlowTest",
+      "to": "EmployeeRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameFlowTest",
+      "to": "TambolaDraw",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameFlowTest",
+      "to": "TambolaDrawRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameFlowTest",
+      "to": "TambolaGame",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameFlowTest",
+      "to": "TambolaGameRepository",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaGameFlowTest",
+      "to": "TambolaGameService",
+      "type": "DEPENDS_ON"
+    },
+    {
+      "from": "TambolaTicketGeneratorTest",
+      "to": "TambolaTicketGenerator",
+      "type": "DEPENDS_ON"
+    }
+  ]
+}

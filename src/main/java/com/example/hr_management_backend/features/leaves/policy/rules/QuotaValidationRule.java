@@ -17,6 +17,7 @@ public class QuotaValidationRule implements LeavePolicyRule {
 
     private final EmployeeLeaveQuotaRepository employeeLeaveQuotaRepository;
     private final LeaveBalanceRepository leaveBalanceRepository;
+    private final com.example.hr_management_backend.features.leaves.service.LeaveAccrualService leaveAccrualService;
 
     @Override
     public String getRuleName() {
@@ -54,25 +55,35 @@ public class QuotaValidationRule implements LeavePolicyRule {
             remaining = 0.0;
         } else {
             LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYear(request.getEmployeeId(), year)
-                    .orElseGet(() -> LeaveBalance.builder()
-                            .employeeId(request.getEmployeeId())
-                            .year(year)
-                            .casualLeaveQuota(6.0)
-                            .casualLeaveUsed(0.0)
-                            .sickLeaveQuota(6.0)
-                            .sickLeaveUsed(0.0)
-                            .earnedLeaveQuota(6.0)
-                            .earnedLeaveUsed(0.0)
-                            .workFromHomeQuota(0.0)
-                            .workFromHomeUsed(0.0)
-                            .restrictedHolidayQuota(2.0)
-                            .restrictedHolidayUsed(0.0)
-                            .build());
+                    .orElseGet(() -> {
+                        LeaveBalance b = LeaveBalance.builder()
+                                .employeeId(request.getEmployeeId())
+                                .year(year)
+                                .casualLeaveUsed(0.0)
+                                .sickLeaveUsed(0.0)
+                                .earnedLeaveUsed(0.0)
+                                .workFromHomeQuota(0.0)
+                                .workFromHomeUsed(0.0)
+                                .restrictedHolidayUsed(0.0)
+                                .carriedForwardLeaveQuota(0.0)
+                                .carriedForwardLeaveUsed(0.0)
+                                .carriedForwardExpiryDate(java.time.LocalDate.of(year, 3, 31))
+                                .carriedForwardExpired(java.time.LocalDate.now().isAfter(java.time.LocalDate.of(year, 3, 31)))
+                                .build();
+                        leaveAccrualService.applyAccrualToBalance(b, employee, year, 2.0);
+                        return b;
+                    });
 
             String normType = reqType.replaceAll("_LEAVE$", "");
             remaining = switch (normType) {
                 case "SICK" -> balance.getSickLeaveRemaining();
-                case "EARNED" -> balance.getEarnedLeaveRemaining();
+                case "EARNED" -> {
+                    if (request.getStartDate().isAfter(balance.getEffectiveCarriedForwardExpiryDate())) {
+                        yield balance.getCurrentYearEarnedLeaveRemaining();
+                    } else {
+                        yield balance.getEarnedLeaveRemaining();
+                    }
+                }
                 case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.getRestrictedHolidayRemaining();
                 default -> balance.getCasualLeaveRemaining();
             };

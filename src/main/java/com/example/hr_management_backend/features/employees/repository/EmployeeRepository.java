@@ -39,5 +39,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT e FROM Employee e WHERE e.id = :id")
     Optional<Employee> findByIdForUpdate(@Param("id") Long id);
+
+    @Query(value = "SELECT nextval('employee_code_seq')", nativeQuery = true)
+    Long getNextEmployeeCodeSequence();
 }
 

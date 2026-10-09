@@ -9,7 +9,10 @@ import java.time.LocalDate;
 @Table(name = "employees", indexes = {
     @Index(name = "idx_employee_code", columnList = "employeeCode"),
     @Index(name = "idx_employee_dept", columnList = "department"),
-    @Index(name = "idx_employee_manager", columnList = "manager_id")
+    @Index(name = "idx_employee_manager", columnList = "manager_id"),
+    @Index(name = "idx_employee_email", columnList = "email"),
+    @Index(name = "idx_employee_status", columnList = "status"),
+    @Index(name = "idx_employee_role", columnList = "role")
 })
 @Data
 @NoArgsConstructor
@@ -35,6 +38,10 @@ public class Employee {
     private String designation;
 
     private String role; // e.g. EMPLOYEE, MANAGER, HR, SUPER_ADMIN
+
+    @Builder.Default
+    @Column(name = "system_role", nullable = false, columnDefinition = "VARCHAR(255) DEFAULT 'NONE'")
+    private String systemRole = "NONE"; // NONE, ADMIN, SUPER_ADMIN
 
     @Column(unique = true)
     private String employeeCode;
@@ -80,5 +87,11 @@ public class Employee {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "manager_id")
     private Employee manager; // Assigned manager or leave approver
+
+    public String getName() {
+        String first = firstName != null ? firstName.trim() : "";
+        String last = lastName != null ? lastName.trim() : "";
+        return (first + " " + last).trim();
+    }
 }
 

@@ -39,22 +39,26 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) throws Exception {
         log.info("Ensuring complete production data seeding (1 Admin, 1 HR: Aadisha Dhullar, 3 Managers, 28 Excel Employees)...");
 
-            // 1. Super Admin (System user ONLY - not an employee entity)
-            createUser("admin@company.com", "admin123", "ROLE_SUPER_ADMIN", null);
+            // 1. Super Admin: Bust the rule that super admins can't have their own ID!
+            // Super Admin has its own employee entity (EMP-001) alongside system role SUPER_ADMIN
+            Employee adminEmployee = createEmployee("System", "Administrator", "admin@company.com", "Executive", "System Administrator", "SUPER_ADMIN", "EMP-001", "System Admin", null, false, "+91 98123 00001", "1990-01-01", "Other", "HQ, Sector 17, Chandigarh");
+            adminEmployee.setSystemRole("SUPER_ADMIN");
+            adminEmployee = employeeRepository.save(adminEmployee);
+            createUser("admin@company.com", "admin123", "ROLE_SUPER_ADMIN", "SUPER_ADMIN", adminEmployee.getId());
 
             // 2. HR Head: Aadisha Dhullar (Employee entity)
             Employee hrEmployee = createEmployee("Aadisha", "Dhullar", "hr@company.com", "Human Resources", "HR Lead", "HR", "EMP-002", "Aadisha Dhullar", null, false, "+91 98123 00002", "1994-06-18", "Female", "Sector 17, Chandigarh");
-            createUser("hr@company.com", "hr123", "ROLE_HR", hrEmployee.getId());
+            createUser("hr@company.com", "hr123", "ROLE_HR", "NONE", hrEmployee.getId());
 
             // 3. Managers (isAttendanceTracked = false)
             Employee harshManager = createEmployee("Harsh", "Kaushal", "harsh.kaushal@company.com", "Engineering", "Engineering Lead", "MANAGER", "EMP-101", "Harsh Kaushal", null, false, "+91 98123 00101", "1989-03-25", "Male", "Phase 8, Mohali");
-            createUser("harsh.kaushal@company.com", "manager123", "ROLE_MANAGER", harshManager.getId());
+            createUser("harsh.kaushal@company.com", "manager123", "ROLE_MANAGER", "NONE", harshManager.getId());
 
             Employee naveenManager = createEmployee("Naveen Chandra", "Tiwari", "naveen.tiwari@company.com", "Product", "Product Manager", "MANAGER", "EMP-102", "Naveen Chandra Tiwari", null, false, "+91 98123 00102", "1988-11-12", "Male", "IT Park, Chandigarh");
-            createUser("naveen.tiwari@company.com", "manager123", "ROLE_MANAGER", naveenManager.getId());
+            createUser("naveen.tiwari@company.com", "manager123", "ROLE_MANAGER", "NONE", naveenManager.getId());
 
             Employee ankeshManager = createEmployee("Ankesh", "Verma", "ankesh.verma@company.com", "Sales & Marketing", "Sales Director", "MANAGER", "EMP-103", "Ankesh Verma", null, false, "+91 98123 00103", "1990-07-08", "Male", "Civil Lines, Jaipur");
-            createUser("ankesh.verma@company.com", "manager123", "ROLE_MANAGER", ankeshManager.getId());
+            createUser("ankesh.verma@company.com", "manager123", "ROLE_MANAGER", "NONE", ankeshManager.getId());
 
             // 4. Employees (All 29 Real Excel Employees - isAttendanceTracked = true)
             // Engineering Team (Harsh Kaushal)
@@ -145,6 +149,9 @@ public class DataInitializer implements CommandLineRunner {
             existing.setDepartment(dept);
             existing.setDesignation(designation);
             existing.setRole(role);
+            if (existing.getSystemRole() == null || "NONE".equals(existing.getSystemRole())) {
+                existing.setSystemRole("SUPER_ADMIN".equalsIgnoreCase(role) ? "SUPER_ADMIN" : "NONE");
+            }
             existing.setBiometricName(biometricName != null ? biometricName : (firstName + " " + lastName));
             existing.setManager(manager);
             existing.setIsAttendanceTracked(isAttendanceTracked);
@@ -164,6 +171,7 @@ public class DataInitializer implements CommandLineRunner {
                 .department(dept)
                 .designation(designation)
                 .role(role)
+                .systemRole("SUPER_ADMIN".equalsIgnoreCase(role) ? "SUPER_ADMIN" : "NONE")
                 .employeeCode(code)
                 .biometricName(biometricName != null ? biometricName : (firstName + " " + lastName))
                 .joiningDate(LocalDate.of(2024, 1, 15))
@@ -182,10 +190,15 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void createUser(String email, String password, String role, Long employeeId) {
+        createUser(email, password, role, "NONE", employeeId);
+    }
+
+    private void createUser(String email, String password, String role, String systemRole, Long employeeId) {
         User user = userRepository.findByEmail(email).orElseGet(User::new);
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(password));
         user.setRole(role);
+        user.setSystemRole(systemRole != null ? systemRole : "NONE");
         user.setEmployeeId(employeeId);
         userRepository.save(user);
     }

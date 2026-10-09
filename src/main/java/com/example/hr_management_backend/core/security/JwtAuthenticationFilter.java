@@ -33,13 +33,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String jwt = parseJwt(request);
             if (jwt != null && jwtUtils.validateJwtToken(jwt)) {
                 String username = jwtUtils.getUserNameFromJwtToken(jwt);
+                java.util.List<String> authStrings = jwtUtils.getAuthoritiesFromJwtToken(jwt);
 
-                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                java.util.List<org.springframework.security.core.GrantedAuthority> authorities;
+                if (authStrings != null && !authStrings.isEmpty()) {
+                    // ZERO-QUERY FAST PATH: Direct in-memory authentication from cryptographically verified claims
+                    authorities = authStrings.stream()
+                            .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
+                            .collect(java.util.stream.Collectors.toList());
+                } else {
+                    // Fallback to DB for legacy tokens
+                    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                    authorities = new java.util.ArrayList<>(userDetails.getAuthorities());
+                }
+
+                org.springframework.security.core.userdetails.User principal =
+                        new org.springframework.security.core.userdetails.User(username, "", authorities);
+
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
-                                userDetails,
+                                principal,
                                 null,
-                                userDetails.getAuthorities()
+                                authorities
                         );
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 

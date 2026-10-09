@@ -27,7 +27,7 @@ public class GameController {
     }
 
     @PatchMapping("/{gameKey}/status")
-    @PreAuthorize("hasAnyRole('HR_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN', 'SUPER_ADMIN', 'ADMIN')")
     public ResponseEntity<CompanyGame> updateGameStatus(
             @PathVariable String gameKey,
             @RequestParam boolean isEnabled) {
@@ -35,7 +35,7 @@ public class GameController {
     }
 
     @PatchMapping("/{gameKey}/access")
-    @PreAuthorize("hasAnyRole('HR_ADMIN', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('HR_ADMIN', 'SUPER_ADMIN', 'ADMIN')")
     public ResponseEntity<CompanyGame> updateGameAccess(
             @PathVariable String gameKey,
             @RequestParam String allowedRoles) {

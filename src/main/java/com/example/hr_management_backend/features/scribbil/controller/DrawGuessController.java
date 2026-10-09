@@ -60,6 +60,15 @@ public class DrawGuessController {
         return ResponseEntity.ok(Map.of("message", "Game starting"));
     }
 
+    @PostMapping("/rooms/{roomCode}/restart")
+    public ResponseEntity<Map<String, String>> restartGame(
+            @PathVariable String roomCode,
+            @RequestBody(required = false) RestartDrawGuessRoomRequest request,
+            Authentication authentication) {
+        gameService.restartGame(roomCode, request, authentication.getName());
+        return ResponseEntity.ok(Map.of("message", "Game restarting"));
+    }
+
     @PostMapping("/rooms/{roomCode}/select-word")
     public ResponseEntity<Map<String, String>> selectWord(
             @PathVariable String roomCode,

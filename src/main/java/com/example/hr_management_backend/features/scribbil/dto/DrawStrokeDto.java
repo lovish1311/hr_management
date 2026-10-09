@@ -13,6 +13,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DrawStrokeDto {
+    private String strokeId;
     private String roomCode;
     private StrokeType strokeType; // DRAW, ERASE, CLEAR, UNDO, FILL
     private String color;

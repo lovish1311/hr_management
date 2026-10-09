@@ -15,8 +15,8 @@ import java.util.List;
 @Builder
 public class ElevateEmployeeDto {
 
-    @NotBlank(message = "System role is required")
-    private String role; // e.g. "SUPER_ADMIN", "HR", "MANAGER", "EMPLOYEE"
+    private String role; // Functional role: e.g. "HR", "MANAGER", "EMPLOYEE"
+    private String systemRole; // Administrative tier: e.g. "NONE", "ADMIN", "SUPER_ADMIN"
 
     @Builder.Default
     private List<String> authorities = new ArrayList<>(); // e.g. ["PAYROLL_MANAGE", "LEAVE_APPROVE_ALL"]

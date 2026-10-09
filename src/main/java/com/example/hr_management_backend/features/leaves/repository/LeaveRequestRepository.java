@@ -102,4 +102,25 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     Double sumPendingLeaves(@Param("employeeId") Long employeeId,
                             @Param("leaveType") String leaveType,
                             @Param("year") int year);
+
+    /**
+     * Single-trip aggregation query that groups all pending leaves by leaveType for a given employee and year.
+     * Replaces 5 sequential database calls with 1 unified database trip.
+     */
+    @Query("SELECT UPPER(lr.leaveType), COALESCE(SUM(lr.totalDays), 0.0) FROM LeaveRequest lr " +
+           "WHERE lr.employeeId = :employeeId AND lr.status = 'PENDING' " +
+           "AND EXTRACT(YEAR FROM lr.startDate) = :year " +
+           "GROUP BY lr.leaveType")
+    List<Object[]> sumPendingLeavesGroupedByType(@Param("employeeId") Long employeeId,
+                                                @Param("year") int year);
+
+    /**
+     * Single-trip query that joins LeaveRequest with Employee to fetch pending leaves
+     * with employee names without loading all employees into memory.
+     */
+    @Query("SELECT lr.id, CONCAT(e.firstName, ' ', e.lastName), CAST(lr.startDate AS string), CAST(lr.endDate AS string), COALESCE(lr.reason, 'N/A') " +
+           "FROM LeaveRequest lr, Employee e " +
+           "WHERE lr.employeeId = e.id AND lr.status = 'PENDING' " +
+           "ORDER BY lr.createdAt DESC")
+    List<Object[]> findPendingLeavesWithEmployeeDetails();
 }

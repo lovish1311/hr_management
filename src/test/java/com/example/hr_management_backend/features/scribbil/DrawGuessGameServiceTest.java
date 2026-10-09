@@ -32,6 +32,7 @@ class DrawGuessGameServiceTest {
     @Mock private WordDictionaryService wordDictionaryService;
     @Mock private EmployeeRepository employeeRepository;
     @Mock private DrawGuessWebSocketSessionManager sessionManager;
+    @Mock private DrawGuessScoringEngine scoringEngine;
 
     @InjectMocks
     private DrawGuessGameServiceImpl gameService;
@@ -161,6 +162,7 @@ class DrawGuessGameServiceTest {
         when(employeeRepository.findByEmail("rahul@company.com")).thenReturn(Optional.of(guesserEmployee));
         when(playerRepository.findByRoomCodeAndEmployeeId("DG1234", 2L)).thenReturn(Optional.of(player));
         when(playerRepository.findByRoomCodeAndIsConnectedTrue("DG1234")).thenReturn(List.of(player));
+        when(scoringEngine.calculateGuessScore(anyDouble(), anyDouble())).thenReturn(400);
 
         GuessResultDto result = gameService.submitGuess("DG1234", "elephant", "rahul@company.com");
 

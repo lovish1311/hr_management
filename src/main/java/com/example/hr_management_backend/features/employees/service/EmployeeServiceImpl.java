@@ -1,6 +1,7 @@
 package com.example.hr_management_backend.features.employees.service;
 
 import com.example.hr_management_backend.core.exception.ResourceNotFoundException;
+import com.example.hr_management_backend.features.auth.model.User;
 import com.example.hr_management_backend.features.employees.dto.EmployeeDetailDto;
 import com.example.hr_management_backend.features.employees.dto.EmployeeSummaryDto;
 import com.example.hr_management_backend.features.employees.model.Employee;
@@ -32,6 +33,13 @@ import com.example.hr_management_backend.features.employees.model.EmployeeAuthor
 import com.example.hr_management_backend.features.employees.repository.EmployeeAuthorityRepository;
 import java.time.LocalDateTime;
 
+import com.example.hr_management_backend.features.auth.repository.UserActivationTokenRepository;
+import com.example.hr_management_backend.features.email.service.EmailOutboxService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -43,16 +51,91 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final LeaveBalanceRepository leaveBalanceRepository;
     private final EmployeeAuthorityRepository employeeAuthorityRepository;
     private final UserRepository userRepository;
+    private final UserActivationTokenRepository userActivationTokenRepository;
+    private final EmailOutboxService emailOutboxService;
+    private final PasswordEncoder passwordEncoder;
+    private final com.example.hr_management_backend.features.auth.websocket.PermissionWebSocketSessionManager permissionWebSocketSessionManager;
+    @org.springframework.beans.factory.annotation.Qualifier("dbExecutor")
+    private final java.util.concurrent.Executor dbExecutor;
+
+    private String sha256(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Error computing SHA-256 hash", e);
+        }
+    }
+
+    private void sendActivationKeyForUser(User user, Employee employee) {
+        // Invalidate any previously issued active activation tokens for this user
+        userActivationTokenRepository.invalidateActiveTokensForUser(user.getId());
+
+        String rawKey = "ACT-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String keyHash = sha256(rawKey);
+
+        com.example.hr_management_backend.features.auth.model.UserActivationToken token =
+                com.example.hr_management_backend.features.auth.model.UserActivationToken.builder()
+                        .userId(user.getId())
+                        .employeeId(employee.getId())
+                        .activationKeyHash(keyHash)
+                        .expiresAt(LocalDateTime.now().plusHours(48))
+                        .used(false)
+                        .build();
+
+        userActivationTokenRepository.save(token);
+
+        emailOutboxService.sendEmployeeActivationKey(
+                employee.getEmail(),
+                employee.getName(),
+                rawKey,
+                employee.getRole()
+        );
+        log.info("[Onboarding] Dispatched activation key {} to employee email {}", rawKey, employee.getEmail());
+    }
 
     @Override
     @Transactional
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public Employee createEmployee(Employee employee) {
         if (employee.getEmployeeCode() == null || employee.getEmployeeCode().isBlank()) {
-            long count = employeeRepository.count() + 1000;
-            employee.setEmployeeCode("EMP-" + count);
+            Long nextSeq = employeeRepository.getNextEmployeeCodeSequence();
+            employee.setEmployeeCode("EMP-" + nextSeq);
         }
-        return employeeRepository.save(employee);
+        Employee saved = employeeRepository.save(employee);
+
+        if (saved.getEmail() != null && !saved.getEmail().isBlank()) {
+            String cleanEmail = saved.getEmail().trim().toLowerCase();
+            try {
+                User user = userRepository.findByEmail(cleanEmail).orElseGet(() -> {
+                    String role = saved.getRole() != null ? saved.getRole() : "EMPLOYEE";
+                    if (!role.startsWith("ROLE_")) {
+                        role = "ROLE_" + role;
+                    }
+                    User newUser = User.builder()
+                            .email(cleanEmail)
+                            .password(passwordEncoder.encode("Init@" + System.currentTimeMillis()))
+                            .role(role)
+                            .systemRole(saved.getSystemRole() != null ? saved.getSystemRole() : "NONE")
+                            .employeeId(saved.getId())
+                            .build();
+                    return userRepository.save(newUser);
+                });
+
+                sendActivationKeyForUser(user, saved);
+            } catch (Exception ex) {
+                log.warn("[Employee Creation] Failed to generate/email activation key for {}: {}", saved.getEmail(), ex.getMessage());
+            }
+        }
+
+        return saved;
     }
 
     @Override
@@ -62,9 +145,20 @@ public class EmployeeServiceImpl implements EmployeeService {
         Employee employee = employeeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + id));
 
+        String oldEmail = employee.getEmail();
+        String newEmail = employeeDetails.getEmail() != null ? employeeDetails.getEmail().trim().toLowerCase() : null;
+
         employee.setFirstName(employeeDetails.getFirstName());
         employee.setLastName(employeeDetails.getLastName());
-        employee.setEmail(employeeDetails.getEmail());
+        if (newEmail != null && !newEmail.equalsIgnoreCase(oldEmail)) {
+            employee.setEmail(newEmail);
+            // Synchronize User table email to prevent user lockout
+            userRepository.findByEmail(oldEmail != null ? oldEmail.trim().toLowerCase() : "").ifPresent(u -> {
+                u.setEmail(newEmail);
+                userRepository.save(u);
+                log.info("[Employee Update] Synchronized user email from {} to {}", oldEmail, newEmail);
+            });
+        }
         employee.setDepartment(employeeDetails.getDepartment());
         employee.setDesignation(employeeDetails.getDesignation());
         employee.setRole(employeeDetails.getRole());
@@ -209,6 +303,23 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         Employee saved = employeeRepository.save(employee);
+
+        try {
+            List<String> currentAuthorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(employeeId);
+            permissionWebSocketSessionManager.sendPermissionUpdate(employeeId, java.util.Map.of(
+                    "type", "PERMISSIONS_UPDATED",
+                    "employeeId", employeeId,
+                    "role", saved.getRole() != null ? saved.getRole() : "EMPLOYEE",
+                    "systemRole", saved.getSystemRole() != null ? saved.getSystemRole() : "NONE",
+                    "authorities", currentAuthorities,
+                    "hasTambolaAccess", Boolean.TRUE.equals(saved.getHasTambolaAccess()),
+                    "isAttendanceTracked", Boolean.TRUE.equals(saved.getIsAttendanceTracked()),
+                    "timestamp", System.currentTimeMillis()
+            ));
+        } catch (Exception e) {
+            log.warn("Failed to dispatch permission update WebSocket event for employeeId {}: {}", employeeId, e.getMessage());
+        }
+
         return mapToDetailDto(saved);
     }
 
@@ -264,6 +375,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .department(employee.getDepartment())
                 .designation(employee.getDesignation())
                 .role(employee.getRole())
+                .systemRole(employee.getSystemRole())
                 .status(employee.getStatus())
                 .phoneNumber(employee.getPhoneNumber())
                 .joiningDate(employee.getJoiningDate())
@@ -288,20 +400,104 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Transactional
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public EmployeeDetailDto elevateRoleAndPermissions(Long employeeId, ElevateEmployeeDto dto, String actorEmail) {
+        User actorUser = userRepository.findByEmail(actorEmail).orElse(null);
+        boolean isActorSuperAdmin = "admin@company.com".equalsIgnoreCase(actorEmail) ||
+                (actorUser != null && ("SUPER_ADMIN".equalsIgnoreCase(actorUser.getSystemRole()) ||
+                                       "ROLE_SUPER_ADMIN".equalsIgnoreCase(actorUser.getRole()) ||
+                                       "SUPER_ADMIN".equalsIgnoreCase(actorUser.getRole())));
+
+        boolean isActorAdmin = isActorSuperAdmin ||
+                (actorUser != null && ("ADMIN".equalsIgnoreCase(actorUser.getSystemRole()) ||
+                                       "ROLE_ADMIN".equalsIgnoreCase(actorUser.getRole()) ||
+                                       "ADMIN".equalsIgnoreCase(actorUser.getRole())));
+
+        if (!isActorAdmin && !isActorSuperAdmin) {
+            throw new org.springframework.security.access.AccessDeniedException("Access denied: only Administrators or Super Administrators can modify employee roles.");
+        }
+
         Employee employee = employeeRepository.findById(employeeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + employeeId));
 
+        boolean isTargetSuperAdmin = "SUPER_ADMIN".equalsIgnoreCase(employee.getSystemRole()) ||
+                "SUPER_ADMIN".equalsIgnoreCase(employee.getRole()) ||
+                "admin@company.com".equalsIgnoreCase(employee.getEmail());
+
+        boolean isTargetAdmin = isTargetSuperAdmin || "ADMIN".equalsIgnoreCase(employee.getSystemRole());
+
+        // 1. Guard against modifying or demoting Super Admin
+        if (isTargetSuperAdmin) {
+            if (!isActorSuperAdmin || "admin@company.com".equalsIgnoreCase(employee.getEmail())) {
+                throw new org.springframework.security.access.AccessDeniedException("Super Administrator account cannot be modified or demoted.");
+            }
+        }
+
+        // 2. Guard for regular Admin actor
+        if (!isActorSuperAdmin) {
+            // Admin cannot change another Admin's role or permissions, nor Super Admin's
+            if (isTargetAdmin) {
+                throw new org.springframework.security.access.AccessDeniedException("Admins cannot modify, demote, or revoke roles of other Admins or Super Admins. Only Super Admin has this privilege.");
+            }
+            // Admin cannot grant Super Admin access (only 1 single root Super Admin exists)
+            if (dto.getSystemRole() != null && "SUPER_ADMIN".equalsIgnoreCase(dto.getSystemRole())) {
+                throw new org.springframework.security.access.AccessDeniedException("Admins cannot assign the Super Admin role.");
+            }
+            if (dto.getRole() != null && "SUPER_ADMIN".equalsIgnoreCase(dto.getRole())) {
+                throw new org.springframework.security.access.AccessDeniedException("Admins cannot assign the Super Admin role.");
+            }
+            // Co-Leader Rule: An Admin CAN promote a non-admin employee to ADMIN!
+            // But an Admin cannot demote any Admin (blocked by isTargetAdmin check above).
+        }
+
+        // Apply functional role if provided
         if (dto.getRole() != null && !dto.getRole().isBlank()) {
             String newRole = dto.getRole().trim().toUpperCase().replace("ROLE_", "");
-            employee.setRole(newRole);
-            employeeRepository.save(employee);
-
-            // Synchronize corresponding User entity if it exists
-            userRepository.findByEmail(employee.getEmail()).ifPresent(user -> {
-                user.setRole("ROLE_" + newRole);
-                userRepository.save(user);
-            });
+            if (!"SUPER_ADMIN".equalsIgnoreCase(newRole) && !"ADMIN".equalsIgnoreCase(newRole)) {
+                employee.setRole(newRole);
+            }
         }
+
+        // Apply system role if provided
+        if (dto.getSystemRole() != null && !dto.getSystemRole().isBlank()) {
+            String newSystemRole = dto.getSystemRole().trim().toUpperCase().replace("ROLE_", "");
+            if ("SUPER_ADMIN".equalsIgnoreCase(newSystemRole)) {
+                if (isActorSuperAdmin) {
+                    employee.setSystemRole("SUPER_ADMIN");
+                } else {
+                    throw new org.springframework.security.access.AccessDeniedException("Only Super Admin can assign the Super Admin role.");
+                }
+            } else if ("ADMIN".equalsIgnoreCase(newSystemRole)) {
+                // Allowed for both Super Admin and Admin (Co-Leader promotion)
+                employee.setSystemRole("ADMIN");
+            } else if ("NONE".equalsIgnoreCase(newSystemRole)) {
+                // Setting to NONE for an existing Admin is already blocked for regular admins by isTargetAdmin
+                employee.setSystemRole("NONE");
+            } else {
+                employee.setSystemRole(newSystemRole);
+            }
+        }
+
+        employeeRepository.save(employee);
+
+        // Synchronize corresponding User entity if it exists
+        userRepository.findByEmail(employee.getEmail()).ifPresent(user -> {
+            if (dto.getRole() != null && !dto.getRole().isBlank()) {
+                String newRole = dto.getRole().trim().toUpperCase().replace("ROLE_", "");
+                if (!"SUPER_ADMIN".equalsIgnoreCase(newRole) && !"ADMIN".equalsIgnoreCase(newRole)) {
+                    user.setRole("ROLE_" + newRole);
+                }
+            }
+            if (dto.getSystemRole() != null && !dto.getSystemRole().isBlank()) {
+                String newSystemRole = dto.getSystemRole().trim().toUpperCase().replace("ROLE_", "");
+                if ("SUPER_ADMIN".equalsIgnoreCase(newSystemRole)) {
+                    if (isActorSuperAdmin) {
+                        user.setSystemRole("SUPER_ADMIN");
+                    }
+                } else {
+                    user.setSystemRole(newSystemRole);
+                }
+            }
+            userRepository.save(user);
+        });
 
         // Atomically synchronize granular permissions in employee_authorities
         employeeAuthorityRepository.deleteByEmployeeId(employeeId);
@@ -318,8 +514,22 @@ public class EmployeeServiceImpl implements EmployeeService {
             employeeAuthorityRepository.saveAll(authoritiesToSave);
         }
 
-        log.info("Elevated role and authorities for employeeId={} (email={}) by actor={}. New role={}, authorities={}",
-                employeeId, employee.getEmail(), actorEmail, employee.getRole(), dto.getAuthorities());
+        log.info("Elevated role/authorities for employeeId={} (email={}) by actor={}. FunctionalRole={}, SystemRole={}, authorities={}",
+                employeeId, employee.getEmail(), actorEmail, employee.getRole(), employee.getSystemRole(), dto.getAuthorities());
+
+        try {
+            List<String> updatedAuthorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(employeeId);
+            permissionWebSocketSessionManager.sendPermissionUpdate(employeeId, java.util.Map.of(
+                    "type", "PERMISSIONS_UPDATED",
+                    "employeeId", employeeId,
+                    "role", employee.getRole() != null ? employee.getRole() : "EMPLOYEE",
+                    "systemRole", employee.getSystemRole() != null ? employee.getSystemRole() : "NONE",
+                    "authorities", updatedAuthorities,
+                    "timestamp", System.currentTimeMillis()
+            ));
+        } catch (Exception e) {
+            log.warn("Failed to dispatch elevation WebSocket event for employeeId {}: {}", employeeId, e.getMessage());
+        }
 
         return mapToDetailDto(employee);
     }
@@ -333,6 +543,8 @@ public class EmployeeServiceImpl implements EmployeeService {
         }
 
         List<String> authorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(employee.getId());
+        String todayStatus = computeTodayStatus(employee);
+        int leaveBalance = computeLeaveBalance(employee.getId());
 
         return EmployeeDetailDto.builder()
                 .id(employee.getId())
@@ -343,6 +555,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .department(employee.getDepartment())
                 .designation(employee.getDesignation())
                 .role(employee.getRole())
+                .systemRole(employee.getSystemRole())
                 .joiningDate(employee.getJoiningDate())
                 .employmentType(employee.getEmploymentType())
                 .status(employee.getStatus())
@@ -359,11 +572,36 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .departmentCategory(employee.getDepartmentCategory())
                 .managerId(managerId)
                 .managerName(managerName)
-                .todayAttendanceStatus(computeTodayStatus(employee))
-                .leaveBalance(computeLeaveBalance(employee.getId()))
+                .todayAttendanceStatus(todayStatus)
+                .leaveBalance(leaveBalance)
                 .hasTambolaAccess(Boolean.TRUE.equals(employee.getHasTambolaAccess()))
                 .authorities(authorities)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public void sendCredentials(Long employeeId) {
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + employeeId));
+
+        String cleanEmail = employee.getEmail() != null ? employee.getEmail().trim().toLowerCase() : "";
+        User user = userRepository.findByEmail(cleanEmail).orElseGet(() -> {
+            String role = employee.getRole() != null ? employee.getRole() : "EMPLOYEE";
+            if (!role.startsWith("ROLE_")) {
+                role = "ROLE_" + role;
+            }
+            User newUser = User.builder()
+                    .email(cleanEmail)
+                    .password(passwordEncoder.encode("Init@" + System.currentTimeMillis()))
+                    .role(role)
+                    .systemRole(employee.getSystemRole() != null ? employee.getSystemRole() : "NONE")
+                    .employeeId(employee.getId())
+                    .build();
+            return userRepository.save(newUser);
+        });
+
+        sendActivationKeyForUser(user, employee);
     }
 }
 

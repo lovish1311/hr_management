@@ -21,9 +21,10 @@ import java.util.Map;
 public class LeaveController {
 
     private final LeaveService leaveService;
+    private final com.example.hr_management_backend.features.leaves.service.LeaveCarryoverService leaveCarryoverService;
 
     @PostMapping("/apply")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<LeaveRequest> applyForLeave(@RequestBody LeaveRequest request) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String email = auth.getName();
@@ -43,7 +44,7 @@ public class LeaveController {
     }
 
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<LeaveRequest> updateStatus(
             @PathVariable Long id,
             @RequestBody Map<String, String> body) {
@@ -58,7 +59,7 @@ public class LeaveController {
     }
 
     @PutMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<LeaveRequest> cancelLeaveRequest(
             @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> body) {
@@ -77,13 +78,13 @@ public class LeaveController {
     }
 
     @GetMapping("/pending/manager/{managerId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<List<com.example.hr_management_backend.features.leaves.dto.LeaveRequestDto>> getPendingForManager(@PathVariable Long managerId) {
         return ResponseEntity.ok(leaveService.getPendingForManager(managerId));
     }
 
     @GetMapping("/pending/all")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR') or hasAuthority('LEAVE_APPROVE_ALL')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('LEAVE_APPROVE_ALL')")
     public ResponseEntity<List<com.example.hr_management_backend.features.leaves.dto.LeaveRequestDto>> getAllPendingRequests() {
         return ResponseEntity.ok(leaveService.getAllPendingRequests());
     }
@@ -94,7 +95,7 @@ public class LeaveController {
     }
 
     @PostMapping("/admin/bulk-grant")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<Map<String, String>> bulkGrantLeaves(@RequestBody Map<String, Object> body) {
         String leaveType = (String) body.getOrDefault("leaveType", "CASUAL");
         int grantDays = ((Number) body.getOrDefault("grantDays", 1)).intValue();
@@ -109,13 +110,13 @@ public class LeaveController {
     }
 
     @PostMapping("/admin/apply-on-behalf")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<LeaveRequest> applyOnBehalfByHr(@RequestBody LeaveRequest request) {
         return ResponseEntity.ok(leaveService.applyOnBehalfByHr(request));
     }
 
     @PostMapping("/admin/adjust-balance")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<LeaveBalance> adjustEmployeeBalance(@RequestBody Map<String, Object> body) {
         Long employeeId = ((Number) body.get("employeeId")).longValue();
         String leaveType = (String) body.getOrDefault("leaveType", "CASUAL");
@@ -125,7 +126,7 @@ public class LeaveController {
     }
 
     @PutMapping("/{id}/withdraw")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<LeaveRequest> withdrawApprovedLeave(
             @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> body) {
@@ -140,17 +141,35 @@ public class LeaveController {
     }
 
     @DeleteMapping("/clear/all")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
     public ResponseEntity<Map<String, String>> clearAllLeaveData() {
         leaveService.clearAllLeaveData();
         return ResponseEntity.ok(Map.of("message", "All leave requests, permissions, short breaks, and balances cleared successfully across all employees."));
     }
 
     @DeleteMapping("/clear/employee/{employeeId}")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN')")
     public ResponseEntity<Map<String, String>> clearEmployeeLeaveData(@PathVariable Long employeeId) {
         leaveService.clearEmployeeLeaveData(employeeId);
         return ResponseEntity.ok(Map.of("message", "All leave requests, permissions, short breaks, and balance reset successfully for employee ID " + employeeId));
+    }
+
+    @PostMapping("/admin/trigger-carryover")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
+    public ResponseEntity<Map<String, Object>> triggerYearEndCarryover(
+            @RequestParam(required = false) Integer fromYear,
+            @RequestParam(required = false) Integer toYear) {
+        int targetToYear = (toYear != null) ? toYear : java.time.LocalDate.now().getYear();
+        int targetFromYear = (fromYear != null) ? fromYear : targetToYear - 1;
+        return ResponseEntity.ok(leaveCarryoverService.processYearEndCarryover(targetFromYear, targetToYear));
+    }
+
+    @PostMapping("/admin/trigger-expiry")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
+    public ResponseEntity<Map<String, Object>> triggerCarriedForwardExpiry(
+            @RequestParam(required = false) Integer year) {
+        int targetYear = (year != null) ? year : java.time.LocalDate.now().getYear();
+        return ResponseEntity.ok(leaveCarryoverService.processCarriedForwardExpiry(targetYear));
     }
 }
 
