@@ -59,6 +59,29 @@ public class CustomUserDetailsService implements UserDetailsService {
         }
 
         if (empId != null) {
+            Employee emp = employeeRepository.findById(empId).orElse(null);
+            if (emp != null) {
+                if ("TERMINATED".equalsIgnoreCase(emp.getStatus())) {
+                    if (!"DEACTIVATED".equalsIgnoreCase(user.getAccountStatus())) {
+                        user.setAccountStatus("DEACTIVATED");
+                        userRepository.save(user);
+                    }
+                    throw new org.springframework.security.authentication.DisabledException(
+                            "Your employment has ended and this account has been deactivated. Please contact HR."
+                    );
+                } else if ("NOTICE_PERIOD".equalsIgnoreCase(emp.getStatus())
+                        && emp.getRelievingDate() != null
+                        && java.time.LocalDate.now().isAfter(emp.getRelievingDate())) {
+                    emp.setStatus("TERMINATED");
+                    employeeRepository.save(emp);
+                    user.setAccountStatus("DEACTIVATED");
+                    userRepository.save(user);
+                    throw new org.springframework.security.authentication.DisabledException(
+                            "Notice period concluded on " + emp.getRelievingDate() + ". Account has been deactivated."
+                    );
+                }
+            }
+
             List<String> authorities = employeeAuthorityRepository.findAuthoritiesByEmployeeId(empId);
             for (String auth : authorities) {
                 if (auth != null && !auth.isBlank()) {
@@ -67,14 +90,32 @@ public class CustomUserDetailsService implements UserDetailsService {
             }
         }
 
+        if ("DEACTIVATED".equalsIgnoreCase(user.getAccountStatus())) {
+            throw new org.springframework.security.authentication.DisabledException(
+                    "Your account has been deactivated. Please contact HR."
+            );
+        }
+
+        if ("PENDING_ACTIVATION".equalsIgnoreCase(user.getAccountStatus()) || Boolean.FALSE.equals(user.getIsActivated())) {
+            throw new org.springframework.security.authentication.LockedException(
+                    "Your account is pending activation. Please use your activation key to set your password."
+            );
+        }
+
         List<GrantedAuthority> grantedAuthorities = authorityNames.stream()
                 .map(a -> (GrantedAuthority) new SimpleGrantedAuthority(a))
                 .toList();
 
-        return new org.springframework.security.core.userdetails.User(
-                user.getEmail(),
-                user.getPassword(),
-                grantedAuthorities
-        );
+        return UserPrincipal.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .password(user.getPassword())
+                .role(user.getRole())
+                .systemRole(systemRole)
+                .employeeId(empId)
+                .accountStatus(user.getAccountStatus())
+                .isActivated(user.getIsActivated())
+                .authorities(grantedAuthorities)
+                .build();
     }
 }

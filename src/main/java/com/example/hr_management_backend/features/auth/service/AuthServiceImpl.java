@@ -72,40 +72,47 @@ public class AuthServiceImpl implements AuthService {
         SecurityContextHolder.getContext().setAuthentication(authentication);
         String jwt = jwtUtils.generateJwtToken(authentication);
 
-        User user = userRepository.findByEmail(cleanEmail)
-                .orElseThrow(() -> new RuntimeException("User not found: " + cleanEmail));
+        // FAST PATH: Zero duplicate DB queries - extract pre-loaded & verified identity directly from UserPrincipal
+        Object principalObj = authentication.getPrincipal();
+        Long userId = null;
+        String userEmail = cleanEmail;
+        String userRole = "EMPLOYEE";
+        String systemRole = "NONE";
+        Long employeeId = null;
+        java.util.List<String> authorityList = new java.util.ArrayList<>();
 
-        Long empId = user.getEmployeeId();
-        if (empId == null) {
-            empId = employeeRepository.findByEmail(user.getEmail()).map(com.example.hr_management_backend.features.employees.model.Employee::getId).orElse(null);
-        }
-
-        java.util.Set<String> authoritySet = new java.util.LinkedHashSet<>();
-        if (empId != null) {
-            authoritySet.addAll(employeeAuthorityRepository.findAuthoritiesByEmployeeId(empId));
-        }
-
-        String systemRole = user.getSystemRole();
-        if (systemRole == null || systemRole.isBlank()) {
-            systemRole = "NONE";
-        }
-        if ("SUPER_ADMIN".equalsIgnoreCase(user.getRole()) || "ROLE_SUPER_ADMIN".equalsIgnoreCase(user.getRole()) || "SUPER_ADMIN".equalsIgnoreCase(systemRole)) {
-            systemRole = "SUPER_ADMIN";
-            authoritySet.add("ROLE_SUPER_ADMIN");
-            authoritySet.add("ROLE_ADMIN");
-        } else if ("ADMIN".equalsIgnoreCase(systemRole) || "ROLE_ADMIN".equalsIgnoreCase(user.getRole())) {
-            authoritySet.add("ROLE_ADMIN");
+        if (principalObj instanceof com.example.hr_management_backend.core.security.UserPrincipal principal) {
+            userId = principal.getId();
+            userEmail = principal.getEmail();
+            userRole = principal.getRole();
+            systemRole = principal.getSystemRole();
+            employeeId = principal.getEmployeeId();
+            authorityList = principal.getAuthorities() != null
+                    ? principal.getAuthorities().stream().map(org.springframework.security.core.GrantedAuthority::getAuthority).toList()
+                    : java.util.Collections.emptyList();
+        } else {
+            // Resilient fallback for test mocks or alternative authentication providers
+            User user = userRepository.findByEmail(cleanEmail)
+                    .orElseThrow(() -> new com.example.hr_management_backend.core.exception.ResourceNotFoundException("User not found: " + cleanEmail));
+            userId = user.getId();
+            userEmail = user.getEmail();
+            userRole = user.getRole();
+            systemRole = user.getSystemRole();
+            employeeId = user.getEmployeeId();
+            if (authentication.getAuthorities() != null) {
+                authorityList = authentication.getAuthorities().stream().map(org.springframework.security.core.GrantedAuthority::getAuthority).toList();
+            }
         }
 
         return LoginResponse.builder()
                 .token(jwt)
                 .type("Bearer")
-                .id(user.getId())
-                .email(user.getEmail())
-                .role(user.getRole())
-                .systemRole(systemRole)
-                .employeeId(empId)
-                .authorities(new java.util.ArrayList<>(authoritySet))
+                .id(userId)
+                .email(userEmail)
+                .role(userRole)
+                .systemRole(systemRole != null ? systemRole : "NONE")
+                .employeeId(employeeId)
+                .authorities(authorityList)
                 .build();
     }
 
@@ -261,19 +268,80 @@ public class AuthServiceImpl implements AuthService {
         String keyHash = sha256(cleanKey);
 
         UserActivationToken token = userActivationTokenRepository
-                .findFirstByActivationKeyHashAndUsedFalseAndExpiresAtAfter(keyHash, LocalDateTime.now())
-                .orElseThrow(() -> new RuntimeException("Invalid or expired activation key. Please contact HR."));
+                .findFirstByActivationKeyHashAndExpiresAtAfter(keyHash, LocalDateTime.now())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired activation key. Please contact HR."));
 
         User user = userRepository.findById(token.getUserId())
-                .orElseThrow(() -> new RuntimeException("User account not found"));
+                .orElseThrow(() -> new com.example.hr_management_backend.core.exception.ResourceNotFoundException("User account not found"));
+
+        if (Boolean.TRUE.equals(token.getUsed()) || Boolean.TRUE.equals(user.getIsActivated()) || "ACTIVE".equalsIgnoreCase(user.getAccountStatus())) {
+            log.info("[Account Activation] Activation attempted on already-active user: {}", user.getEmail());
+            throw new IllegalStateException("Your account has already been activated! Please sign in with your email and password.");
+        }
 
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setIsActivated(true);
+        user.setAccountStatus("ACTIVE");
         userRepository.save(user);
 
         token.setUsed(true);
         userActivationTokenRepository.save(token);
+        userActivationTokenRepository.invalidateActiveTokensForUser(user.getId());
+
         log.info("[Account Activation] Account activated successfully for user: {}", user.getEmail());
         return user.getEmail();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public com.example.hr_management_backend.features.auth.dto.AccountStatusResponse getAccountStatus(String email) {
+        String cleanEmail = email != null ? email.trim().toLowerCase() : "";
+        User user = userRepository.findByEmail(cleanEmail).orElse(null);
+
+        if (user == null) {
+            return com.example.hr_management_backend.features.auth.dto.AccountStatusResponse.builder()
+                    .email(cleanEmail)
+                    .status("NOT_FOUND")
+                    .isActivated(false)
+                    .message("No account found for this email. Please contact HR.")
+                    .build();
+        }
+
+        String firstName = "";
+        Long empId = user.getEmployeeId();
+        if (empId != null) {
+            firstName = employeeRepository.findById(empId)
+                    .map(Employee::getFirstName)
+                    .orElse("");
+        }
+
+        if ("DEACTIVATED".equalsIgnoreCase(user.getAccountStatus())) {
+            return com.example.hr_management_backend.features.auth.dto.AccountStatusResponse.builder()
+                    .email(cleanEmail)
+                    .status("DEACTIVATED")
+                    .isActivated(user.getIsActivated())
+                    .firstName(firstName)
+                    .message("This account has been deactivated. Please contact HR.")
+                    .build();
+        }
+
+        if ("PENDING_ACTIVATION".equalsIgnoreCase(user.getAccountStatus()) || Boolean.FALSE.equals(user.getIsActivated())) {
+            return com.example.hr_management_backend.features.auth.dto.AccountStatusResponse.builder()
+                    .email(cleanEmail)
+                    .status("PENDING_ACTIVATION")
+                    .isActivated(false)
+                    .firstName(firstName)
+                    .message("Account pending activation. Enter your activation key to set your password.")
+                    .build();
+        }
+
+        return com.example.hr_management_backend.features.auth.dto.AccountStatusResponse.builder()
+                .email(cleanEmail)
+                .status("ACTIVE")
+                .isActivated(true)
+                .firstName(firstName)
+                .message("Account is active.")
+                .build();
     }
 }
 

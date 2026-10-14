@@ -125,6 +125,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                             .role(role)
                             .systemRole(saved.getSystemRole() != null ? saved.getSystemRole() : "NONE")
                             .employeeId(saved.getId())
+                            .isActivated(false)
+                            .accountStatus("PENDING_ACTIVATION")
                             .build();
                     return userRepository.save(newUser);
                 });
@@ -168,6 +170,15 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setEmergencyContactPhone(employeeDetails.getEmergencyContactPhone());
         employee.setEmploymentType(employeeDetails.getEmploymentType());
         employee.setStatus(employeeDetails.getStatus());
+        employee.setRelievingDate(employeeDetails.getRelievingDate());
+        if ("TERMINATED".equalsIgnoreCase(employeeDetails.getStatus())) {
+            userRepository.findByEmail(employee.getEmail()).ifPresent(u -> {
+                u.setAccountStatus("DEACTIVATED");
+                userRepository.save(u);
+                userActivationTokenRepository.invalidateActiveTokensForUser(u.getId());
+                log.info("[Employee Update] Employee {} marked TERMINATED. Deactivated user account {}", employee.getId(), u.getEmail());
+            });
+        }
         employee.setBiometricName(employeeDetails.getBiometricName());
         employee.setLateArrivalAllowedUntil(employeeDetails.getLateArrivalAllowedUntil());
         employee.setEarlyOutAllowedAfter(employeeDetails.getEarlyOutAllowedAfter());
@@ -327,6 +338,13 @@ public class EmployeeServiceImpl implements EmployeeService {
     @Transactional
     @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
     public void deleteEmployee(Long id) {
+        employeeRepository.findById(id).ifPresent(emp -> {
+            userRepository.findByEmail(emp.getEmail()).ifPresent(u -> {
+                u.setAccountStatus("DEACTIVATED");
+                userRepository.save(u);
+                userActivationTokenRepository.invalidateActiveTokensForUser(u.getId());
+            });
+        });
         employeeAuthorityRepository.deleteByEmployeeId(id);
         employeeRepository.deleteById(id);
     }
@@ -557,6 +575,7 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .role(employee.getRole())
                 .systemRole(employee.getSystemRole())
                 .joiningDate(employee.getJoiningDate())
+                .relievingDate(employee.getRelievingDate())
                 .employmentType(employee.getEmploymentType())
                 .status(employee.getStatus())
                 .phoneNumber(employee.getPhoneNumber())
@@ -586,20 +605,33 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found with id: " + employeeId));
 
         String cleanEmail = employee.getEmail() != null ? employee.getEmail().trim().toLowerCase() : "";
-        User user = userRepository.findByEmail(cleanEmail).orElseGet(() -> {
+        User user = userRepository.findByEmail(cleanEmail).orElse(null);
+
+        // Active Employee Guard: Do not re-issue activation keys if already active
+        if (user != null && Boolean.TRUE.equals(user.getIsActivated()) && "ACTIVE".equalsIgnoreCase(user.getAccountStatus())) {
+            throw new IllegalStateException("Employee account is already active! If they forgot their password, please use the Reset Password feature.");
+        }
+
+        if (user == null) {
             String role = employee.getRole() != null ? employee.getRole() : "EMPLOYEE";
             if (!role.startsWith("ROLE_")) {
                 role = "ROLE_" + role;
             }
-            User newUser = User.builder()
+            user = User.builder()
                     .email(cleanEmail)
                     .password(passwordEncoder.encode("Init@" + System.currentTimeMillis()))
                     .role(role)
                     .systemRole(employee.getSystemRole() != null ? employee.getSystemRole() : "NONE")
                     .employeeId(employee.getId())
+                    .isActivated(false)
+                    .accountStatus("PENDING_ACTIVATION")
                     .build();
-            return userRepository.save(newUser);
-        });
+            user = userRepository.save(user);
+        } else {
+            user.setIsActivated(false);
+            user.setAccountStatus("PENDING_ACTIVATION");
+            user = userRepository.save(user);
+        }
 
         sendActivationKeyForUser(user, employee);
     }

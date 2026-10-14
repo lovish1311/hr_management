@@ -200,6 +200,12 @@ public class DataInitializer implements CommandLineRunner {
         user.setRole(role);
         user.setSystemRole(systemRole != null ? systemRole : "NONE");
         user.setEmployeeId(employeeId);
+        if (user.getIsActivated() == null) {
+            user.setIsActivated(true);
+        }
+        if (user.getAccountStatus() == null || user.getAccountStatus().isBlank()) {
+            user.setAccountStatus("ACTIVE");
+        }
         userRepository.save(user);
     }
 

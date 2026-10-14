@@ -52,7 +52,10 @@ public class Employee {
     private String employmentType = "FULL_TIME"; // FULL_TIME, PART_TIME, CONTRACT, INTERN
 
     @Builder.Default
-    private String status = "ACTIVE"; // ACTIVE, PROBATION, ON_LEAVE, TERMINATED
+    private String status = "ACTIVE"; // ACTIVE, PROBATION, ON_LEAVE, NOTICE_PERIOD, TERMINATED
+
+    @Column(name = "relieving_date")
+    private LocalDate relievingDate;
 
     private String phoneNumber;
 

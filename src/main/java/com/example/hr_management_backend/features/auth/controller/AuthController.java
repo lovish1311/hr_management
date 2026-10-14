@@ -79,5 +79,11 @@ public class AuthController {
                 "message", "Account successfully activated! You may now sign in."
         ));
     }
+
+    @GetMapping("/account-status")
+    public ResponseEntity<com.example.hr_management_backend.features.auth.dto.AccountStatusResponse> getAccountStatus(
+            @RequestParam String email) {
+        return ResponseEntity.ok(authService.getAccountStatus(email));
+    }
 }
 

@@ -7,7 +7,8 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users", indexes = {
-    @Index(name = "idx_user_emp_id", columnList = "employeeId")
+    @Index(name = "idx_user_emp_id", columnList = "employeeId"),
+    @Index(name = "idx_user_email_status", columnList = "email, account_status")
 })
 @Data
 @NoArgsConstructor
@@ -34,13 +35,28 @@ public class User {
 
     private Long employeeId;
 
+    @Builder.Default
+    @Column(name = "is_activated")
+    private Boolean isActivated = true;
+
+    @Builder.Default
+    @Column(name = "account_status", length = 50)
+    private String accountStatus = "ACTIVE"; // PENDING_ACTIVATION, ACTIVE, DEACTIVATED
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @PrePersist
-    protected void onCreate() {
+    @PostLoad
+    protected void onInit() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
+        }
+        if (isActivated == null) {
+            isActivated = true;
+        }
+        if (accountStatus == null || accountStatus.isBlank()) {
+            accountStatus = "ACTIVE";
         }
     }
 }

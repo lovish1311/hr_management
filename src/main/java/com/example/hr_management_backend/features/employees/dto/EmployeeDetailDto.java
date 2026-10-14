@@ -22,6 +22,7 @@ public class EmployeeDetailDto {
     private String role;
     private String systemRole;
     private LocalDate joiningDate;
+    private LocalDate relievingDate;
     private String employmentType;
     private String status;
     private String phoneNumber;

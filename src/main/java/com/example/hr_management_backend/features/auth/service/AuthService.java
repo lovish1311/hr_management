@@ -14,5 +14,6 @@ public interface AuthService {
     void forgotPassword(String email);
     void resetPassword(String email, String token, String newPassword);
     String activateAccount(String activationKey, String newPassword);
+    com.example.hr_management_backend.features.auth.dto.AccountStatusResponse getAccountStatus(String email);
 }
 
