@@ -278,7 +278,24 @@ public class LeaveService {
                 || type.contains("EARLY_OUT") || type.contains("EARLY_LEAVE") || type.contains("LATE_ARRIVAL");
         request.setIsTimeBased(isTimeBased);
 
-        // Validate session overlaps
+        // Server-side authoritative calculation of totalDays
+        double daysToApply = isTimeBased ? 0.0 : computeTotalDays(
+                request.getStartDate(), request.getEndDate(),
+                request.getStartSession(), request.getEndSession(), request.getTotalDays());
+        request.setTotalDays(daysToApply);
+
+        // Normalize session names for half-day requests so DB and rules have unambiguous state
+        if (request.getStartDate().equals(request.getEndDate()) && daysToApply == 0.5) {
+            if (isSession2(request.getStartSession()) || isSession2(request.getEndSession())) {
+                request.setStartSession("Session 2");
+                request.setEndSession("Session 2");
+            } else {
+                request.setStartSession("Session 1");
+                request.setEndSession("Session 1");
+            }
+        }
+
+        // Validate session overlaps (now has authoritatively normalized totalDays and sessions)
         validateSessionOverlap(request, isTimeBased);
 
         // Dynamically resolve assigned manager for leave routing
@@ -287,12 +304,6 @@ public class LeaveService {
             log.info("Leave request routed dynamically to assigned manager: {} (ID: {})",
                     employee.getManager().getFirstName() + " " + employee.getManager().getLastName(), employee.getManager().getId());
         }
-
-        // Server-side authoritative calculation of totalDays — never trust client value alone
-        double daysToApply = isTimeBased ? 0.0 : computeTotalDays(
-                request.getStartDate(), request.getEndDate(),
-                request.getStartSession(), request.getEndSession());
-        request.setTotalDays(daysToApply);
 
         if (request.getLeaveType() == null || request.getLeaveType().isBlank()) {
             request.setLeaveType("CASUAL");
@@ -707,14 +718,25 @@ public class LeaveService {
                 || onBehalfType.contains("EARLY_OUT") || onBehalfType.contains("EARLY_LEAVE") || onBehalfType.contains("LATE_ARRIVAL");
         request.setIsTimeBased(isTimeBased);
 
-        // Validate session overlaps
-        validateSessionOverlap(request, isTimeBased);
-
         // Server-side authoritative totalDays calculation
         double daysToApply = isTimeBased ? 0.0 : computeTotalDays(
                 request.getStartDate(), request.getEndDate(),
-                request.getStartSession(), request.getEndSession());
+                request.getStartSession(), request.getEndSession(), request.getTotalDays());
         request.setTotalDays(daysToApply);
+
+        // Explicitly stamp normalized sessions for half-day requests
+        if (request.getStartDate().equals(request.getEndDate()) && daysToApply == 0.5) {
+            if (isSession2(request.getStartSession()) || isSession2(request.getEndSession())) {
+                request.setStartSession("Session 2");
+                request.setEndSession("Session 2");
+            } else {
+                request.setStartSession("Session 1");
+                request.setEndSession("Session 1");
+            }
+        }
+
+        // Validate session overlaps
+        validateSessionOverlap(request, isTimeBased);
 
         if (request.getLeaveType() == null || request.getLeaveType().isBlank()) {
             request.setLeaveType("CASUAL");
@@ -993,20 +1015,31 @@ public class LeaveService {
      *   Day1(S2) - Day3(S1) = 2.0
      */
     double computeTotalDays(LocalDate start, LocalDate end, String startSession, String endSession) {
+        return computeTotalDays(start, end, startSession, endSession, null);
+    }
+
+    double computeTotalDays(LocalDate start, LocalDate end, String startSession, String endSession, Double clientTotalDays) {
         if (start == null || end == null) return 1.0;
+
+        if (start.equals(end)) {
+            boolean isS1 = isSession1(startSession) || isSession1(endSession);
+            boolean isS2 = isSession2(startSession) || isSession2(endSession);
+
+            if (isS1 && isS2) {
+                return 1.0; // Both sessions specified = Full Day
+            }
+            if (isS1 || isS2) {
+                return 0.5; // Single session specified = Half Day
+            }
+            // Fallback: If client explicitly declared 0.5 days on a single-day leave
+            if (clientTotalDays != null && clientTotalDays > 0.0 && clientTotalDays <= 0.5) {
+                return 0.5;
+            }
+            return 1.0; // Unspecified default = full day
+        }
 
         boolean startsS2 = isSession2(startSession) && !isSession1(startSession);
         boolean endsS1 = isSession1(endSession) && !isSession2(endSession);
-
-        if (start.equals(end)) {
-            // Same day
-            if (startsS2 || endsS1) {
-                // Either half of the same day
-                if (startsS2 && endsS1) return 0.0; // SESSION_2 start on same day as SESSION_1 end: invalid, treat as 0
-                return 0.5;
-            }
-            return 1.0; // Both sessions or unspecified = full day
-        }
 
         long rawDays = ChronoUnit.DAYS.between(start, end) + 1;
         double adjustment = 0.0;
@@ -1045,10 +1078,16 @@ public class LeaveService {
                     newS2 = true;
                 } else if (newReq.getStartDate().equals(newReq.getEndDate())) {
                     // Same-day: use normalized session helpers
-                    boolean hasS1 = isSession1(newReq.getStartSession());
-                    boolean hasS2 = isSession2(newReq.getEndSession());
-                    newS1 = hasS1 || (!hasS1 && !hasS2); // default to full day if no session specified
-                    newS2 = hasS2 || (!hasS1 && !hasS2);
+                    boolean hasS1 = isSession1(newReq.getStartSession()) || isSession1(newReq.getEndSession());
+                    boolean hasS2 = isSession2(newReq.getStartSession()) || isSession2(newReq.getEndSession());
+                    boolean isHalf = (newReq.getTotalDays() != null && newReq.getTotalDays() <= 0.5) || (hasS1 != hasS2);
+                    if (isHalf) {
+                        newS1 = !(hasS2 && !hasS1);
+                        newS2 = (hasS2 && !hasS1);
+                    } else {
+                        newS1 = true;
+                        newS2 = true;
+                    }
                 } else if (date.equals(newReq.getStartDate())) {
                     newS1 = !isSession2(newReq.getStartSession()); // S1 unless explicitly starting S2
                     newS2 = true;
@@ -1078,10 +1117,16 @@ public class LeaveService {
                         extS1 = true;
                         extS2 = true;
                     } else if (existing.getStartDate().equals(existing.getEndDate())) {
-                        boolean hasS1 = isSession1(existing.getStartSession());
-                        boolean hasS2 = isSession2(existing.getEndSession());
-                        extS1 = hasS1 || (!hasS1 && !hasS2);
-                        extS2 = hasS2 || (!hasS1 && !hasS2);
+                        boolean hasS1 = isSession1(existing.getStartSession()) || isSession1(existing.getEndSession());
+                        boolean hasS2 = isSession2(existing.getStartSession()) || isSession2(existing.getEndSession());
+                        boolean isHalf = (existing.getTotalDays() != null && existing.getTotalDays() <= 0.5) || (hasS1 != hasS2);
+                        if (isHalf) {
+                            extS1 = !(hasS2 && !hasS1);
+                            extS2 = (hasS2 && !hasS1);
+                        } else {
+                            extS1 = true;
+                            extS2 = true;
+                        }
                     } else if (date.equals(existing.getStartDate())) {
                         extS1 = !isSession2(existing.getStartSession());
                         extS2 = true;

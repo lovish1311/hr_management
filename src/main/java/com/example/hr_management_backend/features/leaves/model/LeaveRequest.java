@@ -49,10 +49,12 @@ public class LeaveRequest {
     private Boolean isTimeBased = false;
 
     @com.fasterxml.jackson.annotation.JsonProperty("fromSession")
+    @com.fasterxml.jackson.annotation.JsonAlias({"startSession", "fromSession", "start_session"})
     @Column(name = "start_session")
     private String startSession;
 
     @com.fasterxml.jackson.annotation.JsonProperty("toSession")
+    @com.fasterxml.jackson.annotation.JsonAlias({"toSession", "endSession", "end_session"})
     @Column(name = "end_session")
     private String endSession;
 

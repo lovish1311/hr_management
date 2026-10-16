@@ -164,4 +164,80 @@ public class LeavePolicyAndCancellationTest {
 
         assertThrows(IllegalStateException.class, () -> leaveService.applyForLeave(reqExcess));
     }
+
+    @Test
+    @DisplayName("Scenario 4: Two half-day leaves (Session 1 & Session 2) on the same date are both permitted to get published")
+    void testAllowTwoHalfDaysOnSameDate() {
+        LocalDate targetDate = LocalDate.now().plusDays(15);
+
+        // 1. Apply Session 1 (Morning half day: 0.5 days)
+        LeaveRequest s1Request = LeaveRequest.builder()
+                .employeeId(testEmployee.getId())
+                .leaveType("CASUAL")
+                .startDate(targetDate)
+                .endDate(targetDate)
+                .startSession("Session 1")
+                .endSession("Session 1")
+                .reason("Morning doctor appointment")
+                .build();
+
+        LeaveRequest s1Saved = leaveService.applyForLeave(s1Request);
+        assertNotNull(s1Saved.getId());
+        assertEquals("PENDING", s1Saved.getStatus());
+        assertEquals(0.5, s1Saved.getTotalDays(), "Session 1 request must compute to 0.5 days");
+
+        // 2. Apply Session 2 (Afternoon half day: 0.5 days) on the exact same date
+        LeaveRequest s2Request = LeaveRequest.builder()
+                .employeeId(testEmployee.getId())
+                .leaveType("CASUAL")
+                .startDate(targetDate)
+                .endDate(targetDate)
+                .startSession("Session 2")
+                .endSession("Session 2")
+                .reason("Afternoon family event")
+                .build();
+
+        LeaveRequest s2Saved = leaveService.applyForLeave(s2Request);
+        assertNotNull(s2Saved.getId());
+        assertEquals("PENDING", s2Saved.getStatus());
+        assertEquals(0.5, s2Saved.getTotalDays(), "Session 2 request must compute to 0.5 days");
+
+        // 3. Attempting to apply a DUPLICATE Session 1 on the same date must fail
+        LeaveRequest s1Duplicate = LeaveRequest.builder()
+                .employeeId(testEmployee.getId())
+                .leaveType("CASUAL")
+                .startDate(targetDate)
+                .endDate(targetDate)
+                .startSession("Session 1")
+                .endSession("Session 1")
+                .reason("Another morning leave")
+                .build();
+
+        IllegalStateException exDuplicate = assertThrows(IllegalStateException.class,
+                () -> leaveService.applyForLeave(s1Duplicate),
+                "Applying a duplicate Session 1 must be rejected by SessionOverlapRule");
+        assertTrue(exDuplicate.getMessage().contains("Leave conflict") || exDuplicate.getMessage().contains("overlapping"),
+                "Exception message must describe conflict: " + exDuplicate.getMessage());
+
+        // 4. Attempting to apply a Full Day on that same date must also fail
+        LeaveRequest fullDayRequest = LeaveRequest.builder()
+                .employeeId(testEmployee.getId())
+                .leaveType("CASUAL")
+                .startDate(targetDate)
+                .endDate(targetDate)
+                .startSession("Session 1")
+                .endSession("Session 2")
+                .reason("Full day leave conflict")
+                .build();
+
+        assertThrows(IllegalStateException.class,
+                () -> leaveService.applyForLeave(fullDayRequest),
+                "Applying a full-day leave over existing half-day leaves must be rejected");
+
+        // 5. If Session 1 is cancelled, a new Session 1 must now be permitted
+        leaveService.cancelLeaveRequest(s1Saved.getId(), testEmployee.getId());
+        LeaveRequest s1Reapplied = leaveService.applyForLeave(s1Duplicate);
+        assertNotNull(s1Reapplied.getId());
+        assertEquals("PENDING", s1Reapplied.getStatus());
+    }
 }

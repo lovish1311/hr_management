@@ -33,12 +33,23 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
      * Uses indexed is_time_based column to prevent unindexed string wildcard scanning.
      */
     @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
-           "AND lr.status != 'REJECTED' AND lr.status != 'WITHDRAWN' " +
+           "AND lr.status != 'REJECTED' AND lr.status != 'CANCELLED' AND lr.status != 'WITHDRAWN' " +
            "AND (lr.isTimeBased IS NULL OR lr.isTimeBased = false) " +
            "AND (:startDate <= lr.endDate AND :endDate >= lr.startDate)")
     List<LeaveRequest> findOverlappingLeaves(@Param("employeeId") Long employeeId,
                                             @Param("startDate") LocalDate startDate,
                                             @Param("endDate") LocalDate endDate);
+
+    /**
+     * Fetch all active leave/permission requests in a date range for session overlap policy rules.
+     * Excludes REJECTED, CANCELLED, and WITHDRAWN statuses.
+     */
+    @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
+           "AND lr.status != 'REJECTED' AND lr.status != 'CANCELLED' AND lr.status != 'WITHDRAWN' " +
+           "AND (:startDate <= lr.endDate AND :endDate >= lr.startDate)")
+    List<LeaveRequest> findActiveLeavesInRange(@Param("employeeId") Long employeeId,
+                                              @Param("startDate") LocalDate startDate,
+                                              @Param("endDate") LocalDate endDate);
 
     @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employeeId = :employeeId AND lr.status = 'APPROVED' AND lr.startDate <= :endDate AND lr.endDate >= :startDate")
     List<LeaveRequest> findApprovedLeavesForEmployeeInRange(@Param("employeeId") Long employeeId,

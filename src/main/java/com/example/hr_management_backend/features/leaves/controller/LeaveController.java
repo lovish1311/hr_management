@@ -126,7 +126,7 @@ public class LeaveController {
     }
 
     @PutMapping("/{id}/withdraw")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<LeaveRequest> withdrawApprovedLeave(
             @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> body) {
