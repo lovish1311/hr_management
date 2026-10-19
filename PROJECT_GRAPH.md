@@ -3,8 +3,8 @@
 This graph catalogs all project nodes, domains, architectural layers, database entities, controllers, and inter-feature dependencies.
 **Rule Compliance**: Whenever a new file, directory, or feature is added or modified, update this graph.
 
-- **Total Nodes**: 226
-- **Total Edges**: 402
+- **Total Nodes**: 227
+- **Total Edges**: 403
 - **Features / Modules**: attendance, auth, core, dashboard, email, employees, games, holidays, leaves, payroll, performance, recruitment, scribbil, settings, tambola
 
 ---
@@ -32,10 +32,11 @@ Total Components: 14
 ---
 
 ## Module / Domain Node: `AUTH`
-Total Components: 20
+Total Components: 21
 
 | Node ID / Class | Layer | Path | Table / Endpoint | Dependencies |
 |---|---|---|---|---|
+| <a id="node-authbehavior"></a>`auth_onboarding_activation_behavior.md` | `review_spec` | [`review_features/auth_onboarding_activation_behavior.md`](../../review_features/auth_onboarding_activation_behavior.md) | Specification | 5 Core Rules, 10 Scenarios, 3 Flowcharts |
 | <a id="node-activateaccountrequest"></a>`ActivateAccountRequest` | `dto` | [`src/main/java/com/example/hr_management_backend/features/auth/dto/ActivateAccountRequest.java`](src/main/java/com/example/hr_management_backend/features/auth/dto/ActivateAccountRequest.java) |  |  |
 | <a id="node-authcontroller"></a>`AuthController` | `controller` | [`src/main/java/com/example/hr_management_backend/features/auth/controller/AuthController.java`](src/main/java/com/example/hr_management_backend/features/auth/controller/AuthController.java) | API: `/api/auth` | [AuthService](#node-authservice), [LoginRequest](#node-loginrequest), [LoginResponse](#node-loginresponse), [RegisterRequest](#node-registerrequest), [UpdateRoleDto](#node-updateroledto) (+1 more) |
 | <a id="node-authservice"></a>`AuthService` | `service` | [`src/main/java/com/example/hr_management_backend/features/auth/service/AuthService.java`](src/main/java/com/example/hr_management_backend/features/auth/service/AuthService.java) |  | [LoginRequest](#node-loginrequest), [LoginResponse](#node-loginresponse), [RegisterRequest](#node-registerrequest), [User](#node-user) |
