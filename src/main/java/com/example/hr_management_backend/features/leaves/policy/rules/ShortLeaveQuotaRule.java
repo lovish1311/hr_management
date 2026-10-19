@@ -39,15 +39,18 @@ public class ShortLeaveQuotaRule implements LeavePolicyRule {
             return;
         }
 
+        // Enforce required start time and end time for intra-day permissions
+        if (request.getStartTime() == null || request.getEndTime() == null) {
+            throw new IllegalArgumentException("Start time and end time are required for intra-day permissions (Short Break, Early Out, Late Arrival).");
+        }
+
         // Enforce max 2 hours (120 minutes) duration for intra-day permissions
-        if (request.getStartTime() != null && request.getEndTime() != null) {
-            long minutes = java.time.Duration.between(request.getStartTime(), request.getEndTime()).toMinutes();
-            if (minutes <= 0) {
-                throw new IllegalArgumentException("End time must be strictly after start time.");
-            }
-            if (minutes > 120) {
-                throw new IllegalStateException("Intra-day permission duration cannot exceed 2 hours (120 minutes). Requested: " + minutes + " minutes.");
-            }
+        long minutes = java.time.Duration.between(request.getStartTime(), request.getEndTime()).toMinutes();
+        if (minutes <= 0) {
+            throw new IllegalArgumentException("End time must be strictly after start time.");
+        }
+        if (minutes > 120) {
+            throw new IllegalStateException("Intra-day permission duration cannot exceed 2 hours (120 minutes). Requested: " + minutes + " minutes.");
         }
 
         // Time-based permissions are logged for HR transparency without automated salary/leave deductions

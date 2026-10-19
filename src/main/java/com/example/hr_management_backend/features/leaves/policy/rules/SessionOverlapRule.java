@@ -127,7 +127,7 @@ public class SessionOverlapRule implements LeavePolicyRule {
     private boolean occupiesSession1(LeaveRequest req, LocalDate date) {
         if (Boolean.TRUE.equals(req.getIsTimeBased())) {
             if (req.getStartTime() == null) return true;
-            return req.getStartTime().isBefore(LocalTime.of(13, 30));
+            return req.getStartTime().isBefore(LocalTime.of(14, 0));
         }
 
         // Date outside request bounds
@@ -173,7 +173,9 @@ public class SessionOverlapRule implements LeavePolicyRule {
     private boolean occupiesSession2(LeaveRequest req, LocalDate date) {
         if (Boolean.TRUE.equals(req.getIsTimeBased())) {
             if (req.getStartTime() == null) return true;
-            return !req.getStartTime().isBefore(LocalTime.of(13, 30));
+            return req.getEndTime() != null
+                    ? req.getEndTime().isAfter(LocalTime.of(14, 0))
+                    : !req.getStartTime().isBefore(LocalTime.of(14, 0));
         }
 
         // Date outside request bounds

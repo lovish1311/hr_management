@@ -233,6 +233,8 @@ public class LeavePolicyTest {
                 .leaveType("SHORT_BREAK")
                 .startDate(LocalDate.of(2026, 9, 20))
                 .endDate(LocalDate.of(2026, 9, 20))
+                .startTime(java.time.LocalTime.of(14, 0))
+                .endTime(java.time.LocalTime.of(15, 0))
                 .reason("Short break request")
                 .build();
         LeaveRequest submittedShort = leaveService.applyForLeave(shortLeaveReq);
@@ -306,12 +308,12 @@ public class LeavePolicyTest {
         Long targetEmpId = emp.getId();
         leaveService.getOrCreateLeaveBalance(targetEmpId, 2026);
 
-        // 1. Create an attendance record marked LATE due to 09:45 AM check-in
+        // 1. Create an attendance record marked LATE due to 10:25 AM check-in (shift starts at 10:00, grace ends 10:15)
         com.example.hr_management_backend.features.attendance.model.Attendance att =
                 new com.example.hr_management_backend.features.attendance.model.Attendance(
                         null, targetEmpId, testDate,
-                        java.time.LocalTime.of(9, 45),
-                        java.time.LocalTime.of(18, 0),
+                        java.time.LocalTime.of(10, 25),
+                        java.time.LocalTime.of(19, 0),
                         "LATE"
                 );
         attendanceRepository.save(att);
@@ -327,7 +329,7 @@ public class LeavePolicyTest {
                 .leaveType("LATE_ARRIVAL")
                 .startDate(testDate)
                 .endDate(testDate)
-                .startTime(java.time.LocalTime.of(9, 0))
+                .startTime(java.time.LocalTime.of(10, 0))
                 .endTime(java.time.LocalTime.of(10, 30))
                 .reason("Late due to traffic")
                 .build();

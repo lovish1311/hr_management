@@ -44,10 +44,11 @@ public class AttendanceService {
         LocalDate today = LocalDate.now();
         LocalTime effectiveInTime = checkInTime != null ? checkInTime : LocalTime.now();
 
-        // Check if employee has an approved full-day non-WFH leave today
+        // Check if employee has an approved full-day non-WFH leave today (allow check-in if on half-day leave)
         List<LeaveRequest> approvedLeaves = leaveRequestRepository.findApprovedLeavesForEmployeeInRange(employeeId, today, today);
         boolean onFullDayLeave = approvedLeaves.stream().anyMatch(l -> 
-                !isShortBreak(l.getLeaveType()) && !isEarlyOut(l.getLeaveType()) && !isLateArrival(l.getLeaveType()) && !isWfh(l.getLeaveType()));
+                !isShortBreak(l.getLeaveType()) && !isEarlyOut(l.getLeaveType()) && !isLateArrival(l.getLeaveType()) && !isWfh(l.getLeaveType())
+                && (l.getTotalDays() == null || l.getTotalDays() >= 1.0));
         if (onFullDayLeave) {
             throw new IllegalStateException("Cannot check in: Employee is on approved leave today.");
         }
@@ -240,6 +241,10 @@ public class AttendanceService {
                         attendanceRepository.delete(attendance);
                     }
                     log.info("Removed leave status from attendance for employeeId={} on date={}", employeeId, dateToSync);
+                } else if (attendance.getCheckInTime() != null || attendance.getCheckOutTime() != null) {
+                    // Time-based permission cancelled/withdrawn: re-evaluate attendance to re-apply any late/early penalties
+                    reEvaluateAttendance(employeeId, dateToSync);
+                    log.info("Re-evaluated attendance after permission withdrawal for employeeId={} on date={}", employeeId, dateToSync);
                 }
             });
             current = current.plusDays(1);
@@ -288,8 +293,6 @@ public class AttendanceService {
                 } else if (lateArrivalLeave != null) {
                     LocalTime approvedLate = lateArrivalLeave.getEndTime() != null ? lateArrivalLeave.getEndTime() : LocalTime.of(12, 0);
                     status = firstIn.isAfter(approvedLate) ? "LATE" : "PRESENT";
-                } else if (earlyOutLeave != null) {
-                    status = firstIn.isAfter(effectiveLateCutoff) ? "LATE" : "PRESENT";
                 } else {
                     status = firstIn.isAfter(effectiveLateCutoff) ? "LATE" : "PRESENT";
                 }
@@ -297,7 +300,7 @@ public class AttendanceService {
                 status = "UNEXCUSED_ABSENT";
             }
 
-            // Evaluate Early Out if present
+            // Evaluate Early Out independently!
             if ("PRESENT".equals(status) && lastOut != null) {
                 LocalTime effectiveEarlyCutoff = getUniversalEarlyCutoff();
                 if (matched.getEarlyOutAllowedAfter() != null) {
@@ -307,14 +310,28 @@ public class AttendanceService {
                 if (earlyOutLeave != null) {
                     LocalTime approvedEarlyStart = earlyOutLeave.getStartTime() != null ? earlyOutLeave.getStartTime() : LocalTime.of(17, 0);
                     if (lastOut.isBefore(approvedEarlyStart)) {
-                        status = "LATE"; // Or "LEFT_EARLY" depending on how it's defined
+                        status = "LATE";
                     }
-                } else if (shortBreakLeave == null && lateArrivalLeave == null) {
-                    // Only apply early out penalty if no other time-based leave is present?
-                    // Actually, just standard logic:
-                    if (lastOut.isBefore(effectiveEarlyCutoff)) {
-                        status = "LATE"; // Consistent with parseAndCommitBiometricExcel
+                } else {
+                    boolean breakCoversEnd = shortBreakLeave != null
+                            && shortBreakLeave.getEndTime() != null
+                            && !shortBreakLeave.getEndTime().isBefore(effectiveEarlyCutoff);
+                    if (breakCoversEnd) {
+                        LocalTime approvedBreakStart = shortBreakLeave.getStartTime() != null ? shortBreakLeave.getStartTime() : LocalTime.of(17, 0);
+                        if (lastOut.isBefore(approvedBreakStart)) {
+                            status = "LATE";
+                        }
+                    } else if (lastOut.isBefore(effectiveEarlyCutoff)) {
+                        status = "LATE";
                     }
+                }
+            }
+
+            // Enforce net work-hour floor (minimum 4 hours / 240 mins) to prevent Ghost Attendance exploit
+            if ("PRESENT".equals(status) && firstIn != null && lastOut != null) {
+                int totalMinutes = (int) java.time.Duration.between(firstIn, lastOut).toMinutes();
+                if (totalMinutes < 240) {
+                    status = "HALF_DAY";
                 }
             }
 
@@ -370,15 +387,18 @@ public class AttendanceService {
                             !current.isBefore(l.getStartDate()) && !current.isAfter(l.getEndDate()))
                     .toList();
 
-            // Separate full-day leaves from time-based (short break / early out)
+            // Separate full-day leaves from time-based (short break / early out / late arrival)
             LeaveRequest fullDayLeave = dayLeaves.stream()
                     .filter(l -> !isShortBreak(l.getLeaveType()) && !isEarlyOut(l.getLeaveType()) && !isLateArrival(l.getLeaveType()))
                     .findFirst().orElse(null);
+
+            // Time-based permissions are ONLY considered active if APPROVED (pending passes do not mask punches)
             LeaveRequest timeBasedLeave = dayLeaves.stream()
-                    .filter(l -> isShortBreak(l.getLeaveType()) || isEarlyOut(l.getLeaveType()) || isLateArrival(l.getLeaveType()))
+                    .filter(l -> (isShortBreak(l.getLeaveType()) || isEarlyOut(l.getLeaveType()) || isLateArrival(l.getLeaveType()))
+                            && "APPROVED".equalsIgnoreCase(l.getStatus()))
                     .findFirst().orElse(null);
 
-            // Priority: full-day leave takes precedence for calendar status; time-based is secondary
+            // Priority: full-day leave takes precedence for calendar status; approved time-based is secondary
             LeaveRequest activeLeave = fullDayLeave != null ? fullDayLeave : timeBasedLeave;
 
             Attendance attendance = attendanceMap.get(current);
@@ -404,9 +424,9 @@ public class AttendanceService {
                     status = "HOLIDAY";
                     statusLabel = generalHoliday.getName() + " (Holiday)";
                 }
-            } else if (activeLeave != null && "PENDING".equalsIgnoreCase(activeLeave.getStatus())) {
+            } else if (fullDayLeave != null && "PENDING".equalsIgnoreCase(fullDayLeave.getStatus()) && attendance == null) {
                 status = "PENDING_LEAVE";
-                statusLabel = "Pending " + (leaveType != null ? leaveType.toUpperCase().replaceAll("_", " ") : "Leave") + " Approval";
+                statusLabel = "Pending " + (fullDayLeave.getLeaveType() != null ? fullDayLeave.getLeaveType().toUpperCase().replaceAll("_", " ") : "Leave") + " Approval";
             } else if (activeLeave != null && !isShortBreak && !isEarlyOut && !isLateArrival) {
                 // Full Day Leave
                 if (isWfh(leaveType)) {
@@ -652,10 +672,6 @@ public class AttendanceService {
                 Employee matched = biometricNameMap.get(key);
                 if (matched == null) matched = fullNameMap.get(key);
                 if (matched == null) matched = firstNameMap.get(key);
-                if (matched == null && key.contains(" ")) {
-                    String firstToken = key.split(" ")[0];
-                    matched = firstNameMap.get(firstToken);
-                }
 
                 String groupKey = matched != null ? "EMP_" + matched.getId() : "NAME_" + key;
                 EmployeePunchCollector collector = aggregatedCollectors.get(groupKey);
@@ -733,84 +749,100 @@ public class AttendanceService {
                             status = isHalfDay ? "HALF_DAY_LEAVE" : "ON_LEAVE";
                             statusLabel = (isHalfDay ? "Half Day Leave (" : "On Approved Leave (") + fullDayLeave.getLeaveType().toUpperCase().replaceAll("_", " ") + ") - Biometric Punched";
                         }
-                    } else if (shortBreakLeave != null) {
-                        LocalTime bStart = shortBreakLeave.getStartTime() != null ? shortBreakLeave.getStartTime() : getUniversalShiftStart();
-                        LocalTime bEnd = shortBreakLeave.getEndTime() != null ? shortBreakLeave.getEndTime() : LocalTime.of(12, 0);
-                        if (bStart.isBefore(getUniversalLateCutoff())) {
-                            if (!firstIn.isAfter(bEnd)) {
-                                presentCount++;
-                                status = "PRESENT";
-                                statusLabel = "Present (Approved Short Break: " + formatTime(bStart) + " - " + formatTime(bEnd) + ")";
-                            } else {
-                                lateCount++;
-                                status = "LATE";
-                                statusLabel = "Late Arrival (" + formatTime(firstIn) + " - Short Break ended " + formatTime(bEnd) + ")";
-                            }
-                        } else {
-                            if (firstIn.isAfter(effectiveLateCutoff)) {
-                                lateCount++;
-                                status = "LATE";
-                                statusLabel = "Late Arrival (" + formatTime(firstIn) + ")";
-                            } else {
-                                presentCount++;
-                                status = "PRESENT";
-                                statusLabel = "Present (Approved Short Break)";
-                            }
-                        }
-                    } else if (lateArrivalLeave != null) {
-                        LocalTime approvedLate = lateArrivalLeave.getEndTime() != null ? lateArrivalLeave.getEndTime() : LocalTime.of(12, 0);
-                        if (firstIn.isAfter(approvedLate)) {
-                            lateCount++;
-                            status = "LATE";
-                            statusLabel = "Late Arrival (" + formatTime(firstIn) + " - Approved until " + formatTime(approvedLate) + ")";
-                        } else {
-                            presentCount++;
-                            status = "PRESENT";
-                            statusLabel = "Present (Approved Late Arrival up to " + formatTime(approvedLate) + ")";
-                        }
-                    } else if (earlyOutLeave != null) {
-                        LocalTime approvedEarly = earlyOutLeave.getStartTime() != null ? earlyOutLeave.getStartTime() : LocalTime.of(17, 0);
-                        if (firstIn.isAfter(effectiveLateCutoff)) {
-                            lateCount++;
-                            status = "LATE";
-                            statusLabel = "Late Arrival (" + formatTime(firstIn) + ")";
-                        } else {
-                            presentCount++;
-                            status = "PRESENT";
-                            statusLabel = "Present (Approved Early Out from " + formatTime(approvedEarly) + ")";
-                        }
-                    } else if (firstIn.isAfter(effectiveLateCutoff)) {
-                        lateCount++;
-                        status = "LATE";
-                        statusLabel = "Late Arrival (" + formatTime(firstIn) + ")";
                     } else {
+                        // 1. Evaluate firstIn (Late Arrival check)
+                        boolean isLate = false;
+                        String lateReason = null;
+                        if (shortBreakLeave != null) {
+                            LocalTime bStart = shortBreakLeave.getStartTime() != null ? shortBreakLeave.getStartTime() : getUniversalShiftStart();
+                            LocalTime bEnd = shortBreakLeave.getEndTime() != null ? shortBreakLeave.getEndTime() : LocalTime.of(12, 0);
+                            if (bStart.isBefore(getUniversalLateCutoff())) {
+                                if (firstIn.isAfter(bEnd)) {
+                                    isLate = true;
+                                    lateReason = "Late Arrival (" + formatTime(firstIn) + " - Short Break ended " + formatTime(bEnd) + ")";
+                                }
+                            } else if (firstIn.isAfter(effectiveLateCutoff)) {
+                                isLate = true;
+                                lateReason = "Late Arrival (" + formatTime(firstIn) + ")";
+                            }
+                        } else if (lateArrivalLeave != null) {
+                            LocalTime approvedLate = lateArrivalLeave.getEndTime() != null ? lateArrivalLeave.getEndTime() : LocalTime.of(12, 0);
+                            if (firstIn.isAfter(approvedLate)) {
+                                isLate = true;
+                                lateReason = "Late Arrival (" + formatTime(firstIn) + " - Approved until " + formatTime(approvedLate) + ")";
+                            }
+                        } else if (firstIn.isAfter(effectiveLateCutoff)) {
+                            isLate = true;
+                            lateReason = "Late Arrival (" + formatTime(firstIn) + ")";
+                        }
+
+                        // 2. Evaluate lastOut (Early Out check) independently!
+                        boolean isLeftEarly = false;
+                        String earlyReason = null;
                         LocalTime effectiveEarlyCutoff = (matched != null && matched.getEarlyOutAllowedAfter() != null)
                                 ? matched.getEarlyOutAllowedAfter()
                                 : getUniversalEarlyCutoff();
 
-                        if (lastOut != null && lastOut.isBefore(effectiveEarlyCutoff)) {
+                        if (lastOut != null) {
+                            if (earlyOutLeave != null) {
+                                LocalTime approvedEarly = earlyOutLeave.getStartTime() != null ? earlyOutLeave.getStartTime() : LocalTime.of(17, 0);
+                                if (lastOut.isBefore(approvedEarly)) {
+                                    isLeftEarly = true;
+                                    earlyReason = "Left Early (" + formatTime(lastOut) + " - Early Out approved from " + formatTime(approvedEarly) + ")";
+                                }
+                            } else {
+                                boolean breakCoversEnd = shortBreakLeave != null
+                                        && shortBreakLeave.getEndTime() != null
+                                        && !shortBreakLeave.getEndTime().isBefore(effectiveEarlyCutoff);
+                                if (breakCoversEnd) {
+                                    LocalTime approvedBreakStart = shortBreakLeave.getStartTime() != null ? shortBreakLeave.getStartTime() : LocalTime.of(17, 0);
+                                    if (lastOut.isBefore(approvedBreakStart)) {
+                                        isLeftEarly = true;
+                                        earlyReason = "Left Early (" + formatTime(lastOut) + " - Short Break from " + formatTime(approvedBreakStart) + ")";
+                                    }
+                                } else if (lastOut.isBefore(effectiveEarlyCutoff)) {
+                                    isLeftEarly = true;
+                                    earlyReason = "Left Early (" + formatTime(lastOut) + ")";
+                                }
+                            }
+                        }
+
+                        // 3. Evaluate total working duration (minimum 4 hours / 240 mins) to prevent Ghost Attendance exploit
+                        int totalMinutes = (firstIn != null && lastOut != null)
+                                ? (int) java.time.Duration.between(firstIn, lastOut).toMinutes()
+                                : 0;
+
+                        if (firstIn != null && lastOut != null && totalMinutes < 240) {
+                            status = "HALF_DAY";
+                            statusLabel = "Half Day (< 4 hrs worked: " + (totalMinutes / 60) + "h " + (totalMinutes % 60) + "m)";
+                            lateCount++;
+                        } else if (isLate) {
                             lateCount++;
                             status = "LATE";
-                            statusLabel = "Left Early (" + formatTime(lastOut) + ")";
+                            statusLabel = lateReason;
+                        } else if (isLeftEarly) {
+                            lateCount++;
+                            status = "LATE";
+                            statusLabel = earlyReason;
                         } else {
-                            int totalMinutes = (firstIn != null && lastOut != null)
-                                    ? (int) java.time.Duration.between(firstIn, lastOut).toMinutes()
-                                    : 0;
-
-                            if (firstIn != null && lastOut != null && totalMinutes < 240) {
-                                status = "HALF_DAY";
-                                statusLabel = "Half Day (< 4 hrs worked: " + (totalMinutes / 60) + "h " + (totalMinutes % 60) + "m)";
-                                lateCount++;
+                            presentCount++;
+                            status = "PRESENT";
+                            if (shortBreakLeave != null) {
+                                LocalTime bStart = shortBreakLeave.getStartTime() != null ? shortBreakLeave.getStartTime() : getUniversalShiftStart();
+                                LocalTime bEnd = shortBreakLeave.getEndTime() != null ? shortBreakLeave.getEndTime() : LocalTime.of(12, 0);
+                                statusLabel = "Present (Approved Short Break: " + formatTime(bStart) + " - " + formatTime(bEnd) + ")";
+                            } else if (lateArrivalLeave != null) {
+                                LocalTime approvedLate = lateArrivalLeave.getEndTime() != null ? lateArrivalLeave.getEndTime() : LocalTime.of(12, 0);
+                                statusLabel = "Present (Approved Late Arrival up to " + formatTime(approvedLate) + ")";
+                            } else if (earlyOutLeave != null) {
+                                LocalTime approvedEarly = earlyOutLeave.getStartTime() != null ? earlyOutLeave.getStartTime() : LocalTime.of(17, 0);
+                                statusLabel = "Present (Approved Early Out from " + formatTime(approvedEarly) + ")";
+                            } else if (matched != null && matched.getLateArrivalAllowedUntil() != null && firstIn.isAfter(lateCutoff)) {
+                                statusLabel = "Present (Late Exemption Granted)";
+                            } else if (matched != null && matched.getEarlyOutAllowedAfter() != null && lastOut != null && lastOut.isBefore(getUniversalEarlyCutoff())) {
+                                statusLabel = "Present (Early Out Exemption Granted)";
                             } else {
-                                presentCount++;
-                                status = "PRESENT";
-                                if (matched != null && matched.getLateArrivalAllowedUntil() != null && firstIn.isAfter(lateCutoff)) {
-                                    statusLabel = "Present (Late Exemption Granted)";
-                                } else if (matched != null && matched.getEarlyOutAllowedAfter() != null && lastOut != null && lastOut.isBefore(getUniversalEarlyCutoff())) {
-                                    statusLabel = "Present (Early Out Exemption Granted)";
-                                } else {
-                                    statusLabel = "Present (" + formatTime(firstIn) + ")";
-                                }
+                                statusLabel = "Present (" + formatTime(firstIn) + ")";
                             }
                         }
                     }

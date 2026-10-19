@@ -3,8 +3,8 @@
 This graph catalogs all project nodes, domains, architectural layers, database entities, controllers, and inter-feature dependencies.
 **Rule Compliance**: Whenever a new file, directory, or feature is added or modified, update this graph.
 
-- **Total Nodes**: 227
-- **Total Edges**: 403
+- **Total Nodes**: 230
+- **Total Edges**: 413
 - **Features / Modules**: attendance, auth, core, dashboard, email, employees, games, holidays, leaves, payroll, performance, recruitment, scribbil, settings, tambola
 
 ---
@@ -169,10 +169,12 @@ Total Components: 10
 ---
 
 ## Module / Domain Node: `LEAVES`
-Total Components: 25
+Total Components: 28
 
 | Node ID / Class | Layer | Path | Table / Endpoint | Dependencies |
 |---|---|---|---|---|
+| <a id="node-timeoffpermissionsaudit"></a>`time_off_permissions_audit_and_test_cases.md` | `review_spec` | [`review_features/time_off_permissions_audit_and_test_cases.md`](../../review_features/time_off_permissions_audit_and_test_cases.md) | Specification & Audit | Short Breaks, Early Out, Late Arrival, 4 Modes, Rollover & Edge Cases |
+| <a id="node-timedoffreviewed"></a>`timed_off_reviewd.md` | `review_audit` | [`review_features/timed_off_reviewd.md`](../../review_features/timed_off_reviewd.md) | Deep Vulnerability Audit & Fix Plan | 5 Failure Scenarios, Security Vectors, Full-Stack Remediation Plan |
 | <a id="node-employeeleavequota"></a>`EmployeeLeaveQuota` | `model` | [`src/main/java/com/example/hr_management_backend/features/leaves/model/EmployeeLeaveQuota.java`](src/main/java/com/example/hr_management_backend/features/leaves/model/EmployeeLeaveQuota.java) | Table: `employee_leave_quotas` |  |
 | <a id="node-employeeleavequotarepository"></a>`EmployeeLeaveQuotaRepository` | `repository` | [`src/main/java/com/example/hr_management_backend/features/leaves/repository/EmployeeLeaveQuotaRepository.java`](src/main/java/com/example/hr_management_backend/features/leaves/repository/EmployeeLeaveQuotaRepository.java) |  | [EmployeeLeaveQuota](#node-employeeleavequota) |
 | <a id="node-futureextensibilityhookrule"></a>`FutureExtensibilityHookRule` | `policy` | [`src/main/java/com/example/hr_management_backend/features/leaves/policy/rules/FutureExtensibilityHookRule.java`](src/main/java/com/example/hr_management_backend/features/leaves/policy/rules/FutureExtensibilityHookRule.java) |  | [Employee](#node-employee), [LeavePolicyRule](#node-leavepolicyrule), [LeaveRequest](#node-leaverequest) |
@@ -187,6 +189,7 @@ Total Components: 25
 | <a id="node-leaveconcurrencytest"></a>`LeaveConcurrencyTest` | `test` | [`src/test/java/com/example/hr_management_backend/features/leaves/LeaveConcurrencyTest.java`](src/test/java/com/example/hr_management_backend/features/leaves/LeaveConcurrencyTest.java) |  | [Employee](#node-employee), [EmployeeRepository](#node-employeerepository), [LeaveBalance](#node-leavebalance), [LeaveBalanceRepository](#node-leavebalancerepository), [LeaveRequest](#node-leaverequest) (+2 more) |
 | <a id="node-leavecontroller"></a>`LeaveController` | `controller` | [`src/main/java/com/example/hr_management_backend/features/leaves/controller/LeaveController.java`](src/main/java/com/example/hr_management_backend/features/leaves/controller/LeaveController.java) |  | [LeaveBalance](#node-leavebalance), [LeaveRequest](#node-leaverequest), [LeaveService](#node-leaveservice) |
 | <a id="node-leavepolicyandcancellationtest"></a>`LeavePolicyAndCancellationTest` | `test` | [`src/test/java/com/example/hr_management_backend/LeavePolicyAndCancellationTest.java`](src/test/java/com/example/hr_management_backend/LeavePolicyAndCancellationTest.java) |  | [Employee](#node-employee), [EmployeeLeaveQuota](#node-employeeleavequota), [EmployeeLeaveQuotaRepository](#node-employeeleavequotarepository), [LeaveBalance](#node-leavebalance), [LeaveBalanceRepository](#node-leavebalancerepository), [LeaveRequest](#node-leaverequest), [LeaveService](#node-leaveservice) |
+| <a id="node-leavepolicytest"></a>`LeavePolicyTest` | `test` | [`src/test/java/com/example/hr_management_backend/LeavePolicyTest.java`](src/test/java/com/example/hr_management_backend/LeavePolicyTest.java) |  | [Attendance](#node-attendance), [AttendanceRepository](#node-attendancerepository), [AttendanceService](#node-attendanceservice), [Employee](#node-employee), [EmployeeRepository](#node-employeerepository), [LeaveBalance](#node-leavebalance), [LeaveRequest](#node-leaverequest), [LeaveService](#node-leaveservice) |
 | <a id="node-leavepolicyengine"></a>`LeavePolicyEngine` | `policy` | [`src/main/java/com/example/hr_management_backend/features/leaves/policy/LeavePolicyEngine.java`](src/main/java/com/example/hr_management_backend/features/leaves/policy/LeavePolicyEngine.java) |  | [Employee](#node-employee), [LeaveRequest](#node-leaverequest) |
 | <a id="node-leavepolicyrule"></a>`LeavePolicyRule` | `policy` | [`src/main/java/com/example/hr_management_backend/features/leaves/policy/LeavePolicyRule.java`](src/main/java/com/example/hr_management_backend/features/leaves/policy/LeavePolicyRule.java) |  | [Employee](#node-employee), [LeaveRequest](#node-leaverequest) |
 | <a id="node-leaverequest"></a>`LeaveRequest` | `model` | [`src/main/java/com/example/hr_management_backend/features/leaves/model/LeaveRequest.java`](src/main/java/com/example/hr_management_backend/features/leaves/model/LeaveRequest.java) | Table: `leave_requests` |  |

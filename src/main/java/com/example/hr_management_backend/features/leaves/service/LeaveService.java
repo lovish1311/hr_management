@@ -287,7 +287,7 @@ public class LeaveService {
             throw new IllegalArgumentException("Leave requests cannot span across calendar years (Dec 31 / Jan 1). Please submit two separate requests for each respective year.");
         }
 
-        String type = request.getLeaveType() != null ? request.getLeaveType().toUpperCase().replaceAll("[ -]", "_") : "";
+        String type = request.getLeaveType() != null ? request.getLeaveType().toUpperCase().replaceAll("[\\s\\-_]+", "_") : "";
         boolean isTimeBased = type.contains("SHORT_BREAK") || type.contains("SHORT_LEAVE")
                 || type.contains("EARLY_OUT") || type.contains("EARLY_LEAVE") || type.contains("LATE_ARRIVAL");
         request.setIsTimeBased(isTimeBased);
@@ -495,10 +495,8 @@ public class LeaveService {
                 request.setStatus("CANCELLED");
                 request.setRejectionReason("Cancellation approved by manager: " + (rejectionReason != null ? rejectionReason : ""));
                 LeaveRequest saved = leaveRequestRepository.save(request);
-                if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
-                    eventPublisher.publishEvent(new LeaveWithdrawnEvent(
-                            saved.getEmployeeId(), saved.getStartDate(), saved.getEndDate(), saved.getLeaveType()));
-                }
+                eventPublisher.publishEvent(new LeaveWithdrawnEvent(
+                        saved.getEmployeeId(), saved.getStartDate(), saved.getEndDate(), saved.getLeaveType()));
                 try {
                     if (targetEmployee != null && targetEmployee.getEmail() != null) {
                         emailOutboxService.sendLeaveDecisionNotification(
@@ -583,24 +581,20 @@ public class LeaveService {
         LeaveRequest saved = leaveRequestRepository.save(request);
 
         if ("APPROVED".equalsIgnoreCase(saved.getStatus())) {
-            if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
-                eventPublisher.publishEvent(new LeaveApprovedEvent(
-                        saved.getEmployeeId(),
-                        saved.getStartDate(),
-                        saved.getEndDate(),
-                        saved.getLeaveType()
-                ));
-            }
+            eventPublisher.publishEvent(new LeaveApprovedEvent(
+                    saved.getEmployeeId(),
+                    saved.getStartDate(),
+                    saved.getEndDate(),
+                    saved.getLeaveType()
+            ));
         } else if (("REJECTED".equalsIgnoreCase(saved.getStatus()) || "CANCELLED".equalsIgnoreCase(saved.getStatus()))
                 && ("APPROVED".equalsIgnoreCase(previousStatus) || "CANCEL_REQUESTED".equalsIgnoreCase(previousStatus))) {
-            if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
-                eventPublisher.publishEvent(new LeaveWithdrawnEvent(
-                        saved.getEmployeeId(),
-                        saved.getStartDate(),
-                        saved.getEndDate(),
-                        saved.getLeaveType()
-                ));
-            }
+            eventPublisher.publishEvent(new LeaveWithdrawnEvent(
+                    saved.getEmployeeId(),
+                    saved.getStartDate(),
+                    saved.getEndDate(),
+                    saved.getLeaveType()
+            ));
         }
 
         try {
@@ -844,18 +838,23 @@ public class LeaveService {
                 }
                 leaveBalanceRepository.save(balance);
             }
+        } else {
+            // PESSIMISTIC LOCK: Lock employee row to serialize permission quota evaluation
+            if (request.getEmployeeId() != null) {
+                employeeRepository.findByIdForUpdate(request.getEmployeeId());
+            }
+            // Enforce admin-configured time-off policies for short breaks, early outs, and late arrivals
+            validateTimeBasedPolicy(request, onBehalfType);
         }
 
         LeaveRequest saved = leaveRequestRepository.save(request);
 
-        if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
-            eventPublisher.publishEvent(new LeaveApprovedEvent(
-                    saved.getEmployeeId(),
-                    saved.getStartDate(),
-                    saved.getEndDate(),
-                    saved.getLeaveType()
-            ));
-        }
+        eventPublisher.publishEvent(new LeaveApprovedEvent(
+                saved.getEmployeeId(),
+                saved.getStartDate(),
+                saved.getEndDate(),
+                saved.getLeaveType()
+        ));
 
         return saved;
     }
@@ -933,14 +932,12 @@ public class LeaveService {
         LeaveRequest saved = leaveRequestRepository.save(request);
 
         leavePolicyEngine.handleStatusChange(saved, status, "WITHDRAWN");
-        if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
-            eventPublisher.publishEvent(new LeaveWithdrawnEvent(
-                    saved.getEmployeeId(),
-                    saved.getStartDate(),
-                    saved.getEndDate(),
-                    saved.getLeaveType()
-            ));
-        }
+        eventPublisher.publishEvent(new LeaveWithdrawnEvent(
+                saved.getEmployeeId(),
+                saved.getStartDate(),
+                saved.getEndDate(),
+                saved.getLeaveType()
+        ));
 
         return saved;
     }
@@ -1077,7 +1074,7 @@ public class LeaveService {
 
     public boolean isDynamicQuotaType(String type) {
         if (type == null) return false;
-        String upper = type.toUpperCase().replaceAll("_LEAVE$", "");
+        String upper = type.toUpperCase().replaceAll("[\\s\\-_]+", "_").replaceAll("_LEAVE$", "");
         return upper.equals("COMP_OFF") || upper.equals("COMPOFF")
                 || upper.equals("MATERNITY") || upper.equals("PATERNITY")
                 || upper.equals("BEREAVEMENT") || upper.equals("BIRTHDAY");
