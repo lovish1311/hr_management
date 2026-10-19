@@ -78,6 +78,9 @@ public class QuotaValidationRule implements LeavePolicyRule {
             remaining = switch (normType) {
                 case "SICK" -> balance.getSickLeaveRemaining();
                 case "EARNED" -> {
+                    if (employee != null && "PROBATION".equalsIgnoreCase(employee.getStatus())) {
+                        throw new IllegalStateException("Earned Leave is strictly blocked during probation period.");
+                    }
                     if (request.getStartDate().isAfter(balance.getEffectiveCarriedForwardExpiryDate())) {
                         yield balance.getCurrentYearEarnedLeaveRemaining();
                     } else {

@@ -16,9 +16,12 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
 
     List<LeaveRequest> findByStatusOrderByCreatedAtDesc(String status);
 
-    @Query("SELECT lr FROM LeaveRequest lr WHERE lr.status = 'PENDING' AND lr.employeeId IN " +
+    @Query("SELECT lr FROM LeaveRequest lr WHERE (lr.status = 'PENDING' OR lr.status = 'CANCEL_REQUESTED') AND lr.employeeId IN " +
            "(SELECT e.id FROM Employee e WHERE e.manager.id = :managerId) ORDER BY lr.createdAt DESC")
     List<LeaveRequest> findPendingForManager(@Param("managerId") Long managerId);
+
+    @Query("SELECT lr FROM LeaveRequest lr WHERE lr.status = 'PENDING' OR lr.status = 'CANCEL_REQUESTED' ORDER BY lr.createdAt DESC")
+    List<LeaveRequest> findAllPendingOrCancelRequested();
 
     @Query("SELECT COUNT(lr) > 0 FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
            "AND lr.status = 'APPROVED' AND :targetDate BETWEEN lr.startDate AND lr.endDate " +
@@ -61,7 +64,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
      * Uses indexed is_time_based column.
      */
     @Query("SELECT COUNT(lr) FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
-           "AND (lr.status = 'APPROVED' OR lr.status = 'PENDING') " +
+           "AND lr.status IN ('APPROVED', 'PENDING', 'CANCEL_REQUESTED') " +
            "AND lr.startDate >= :cycleStart AND lr.startDate <= :cycleEnd " +
            "AND (lr.isTimeBased = true OR UPPER(lr.leaveType) LIKE :typePattern) " +
            "AND (UPPER(lr.leaveType) LIKE :typePattern)")
@@ -75,7 +78,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
      * Used for HOURLY_SEPARATE and HOURLY_COMBINED policy modes.
      */
     @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
-           "AND (lr.status = 'APPROVED' OR lr.status = 'PENDING') " +
+           "AND lr.status IN ('APPROVED', 'PENDING', 'CANCEL_REQUESTED') " +
            "AND lr.startDate >= :cycleStart AND lr.startDate <= :cycleEnd " +
            "AND (lr.isTimeBased = true OR UPPER(lr.leaveType) LIKE '%SHORT%' OR UPPER(lr.leaveType) LIKE '%EARLY%' OR UPPER(lr.leaveType) LIKE '%LATE%') " +
            "AND (:typePattern IS NULL OR UPPER(lr.leaveType) LIKE :typePattern)")
@@ -89,7 +92,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
      * Avoids loading the employee's entire leave history.
      */
     @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
-           "AND (lr.status = 'APPROVED' OR lr.status = 'PENDING') " +
+           "AND lr.status IN ('APPROVED', 'PENDING', 'CANCEL_REQUESTED') " +
            "AND lr.startDate <= :endDate AND lr.endDate >= :startDate " +
            "ORDER BY lr.createdAt DESC")
     List<LeaveRequest> findActiveAndPendingInRange(@Param("employeeId") Long employeeId,
@@ -134,4 +137,18 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
            "WHERE lr.employeeId = e.id AND lr.status = 'PENDING' " +
            "ORDER BY lr.createdAt DESC")
     List<Object[]> findPendingLeavesWithEmployeeDetails();
+
+    @Query("SELECT COALESCE(SUM(lr.totalDays), 0.0) FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
+           "AND lr.status = 'PENDING' AND UPPER(lr.leaveType) IN ('EARNED', 'EARNED_LEAVE') " +
+           "AND EXTRACT(YEAR FROM lr.startDate) = :year AND lr.startDate <= :expiryDate")
+    Double sumPendingEarnedLeavesPreExpiry(@Param("employeeId") Long employeeId,
+                                          @Param("year") int year,
+                                          @Param("expiryDate") LocalDate expiryDate);
+
+    @Query("SELECT COALESCE(SUM(lr.totalDays), 0.0) FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
+           "AND lr.status = 'PENDING' AND UPPER(lr.leaveType) IN ('EARNED', 'EARNED_LEAVE') " +
+           "AND EXTRACT(YEAR FROM lr.startDate) = :year AND lr.startDate > :expiryDate")
+    Double sumPendingEarnedLeavesPostExpiry(@Param("employeeId") Long employeeId,
+                                           @Param("year") int year,
+                                           @Param("expiryDate") LocalDate expiryDate);
 }

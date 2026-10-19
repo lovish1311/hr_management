@@ -67,7 +67,7 @@ public class LeaveCarryoverService {
      * Executes Year-End carryover processing from fromYear to toYear for all employees.
      */
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public Map<String, Object> processYearEndCarryover(int fromYear, int toYear) {
         log.info("Starting Year-End Carryover processing: {} -> {}", fromYear, toYear);
 
@@ -158,7 +158,7 @@ public class LeaveCarryoverService {
      * Executes expiry of carried-forward balances for a specific year whose expiry date has passed.
      */
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public Map<String, Object> processCarriedForwardExpiry(int year) {
         log.info("Starting carried-forward leave expiry processing for year {}", year);
 

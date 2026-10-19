@@ -124,7 +124,11 @@ public class LeaveService {
                         });
                     }
 
-                    return leaveBalanceRepository.save(initial);
+                    try {
+                        return leaveBalanceRepository.save(initial);
+                    } catch (org.springframework.dao.DataIntegrityViolationException dive) {
+                        return leaveBalanceRepository.findByEmployeeIdAndYear(employeeId, year).orElse(initial);
+                    }
                 });
 
         Employee emp = employeeRepository.findById(employeeId).orElse(null);
@@ -145,6 +149,13 @@ public class LeaveService {
         balance.setEarnedLeavePending(pendingMap.getOrDefault("EARNED", 0.0));
         balance.setWorkFromHomePending(pendingMap.getOrDefault("WORK_FROM_HOME", 0.0));
         balance.setRestrictedHolidayPending(pendingMap.getOrDefault("RESTRICTED_HOLIDAY", 0.0));
+
+        // Segregate pending Earned Leaves into pre-expiry and post-expiry buckets
+        LocalDate expiryDate = balance.getEffectiveCarriedForwardExpiryDate();
+        Double prePending = leaveRequestRepository.sumPendingEarnedLeavesPreExpiry(employeeId, year, expiryDate);
+        Double postPending = leaveRequestRepository.sumPendingEarnedLeavesPostExpiry(employeeId, year, expiryDate);
+        balance.setEarnedLeavePendingPreExpiry(prePending != null ? prePending : 0.0);
+        balance.setEarnedLeavePendingPostExpiry(postPending != null ? postPending : 0.0);
 
         return balance;
     }
@@ -243,7 +254,7 @@ public class LeaveService {
     }
 
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public LeaveRequest applyForLeave(LeaveRequest request) {
         String email = "hr@company.com"; // default fallback for tests
         if (request.getEmployeeId() != null) {
@@ -255,7 +266,7 @@ public class LeaveService {
     }
 
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public LeaveRequest applyForLeave(LeaveRequest request, String actorEmail) {
         Employee employee = employeeRepository.findByEmail(actorEmail)
                 .orElseThrow(() -> new RuntimeException("Employee not found for email: " + actorEmail));
@@ -271,6 +282,9 @@ public class LeaveService {
         }
         if (request.getEndDate().isBefore(request.getStartDate())) {
             throw new IllegalArgumentException("End date cannot be before start date");
+        }
+        if (request.getStartDate().getYear() != request.getEndDate().getYear()) {
+            throw new IllegalArgumentException("Leave requests cannot span across calendar years (Dec 31 / Jan 1). Please submit two separate requests for each respective year.");
         }
 
         String type = request.getLeaveType() != null ? request.getLeaveType().toUpperCase().replaceAll("[ -]", "_") : "";
@@ -294,9 +308,6 @@ public class LeaveService {
                 request.setEndSession("Session 1");
             }
         }
-
-        // Validate session overlaps (now has authoritatively normalized totalDays and sessions)
-        validateSessionOverlap(request, isTimeBased);
 
         // Dynamically resolve assigned manager for leave routing
         if (employee.getManager() != null) {
@@ -323,10 +334,12 @@ public class LeaveService {
             double remaining = 0.0;
 
             if ("UNPAID".equals(reqType) || "WORK_FROM_HOME".equals(reqType) || "WFH".equals(reqType)) {
+                // Serialize submission to prevent concurrent duplicate requests on identical dates
+                employeeRepository.findByIdForUpdate(request.getEmployeeId());
                 remaining = 999.0;
             } else {
-                // Check if special leave type exists in dynamic EmployeeLeaveQuota table
-                var specialQuota = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveType(request.getEmployeeId(), currentYear, reqType);
+                // Check if special leave type exists in dynamic EmployeeLeaveQuota table with PESSIMISTIC_WRITE lock
+                var specialQuota = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveTypeForUpdate(request.getEmployeeId(), currentYear, reqType);
                 if (specialQuota.isPresent()) {
                     remaining = specialQuota.get().getRemaining();
                 } else if (isDynamicQuotaType(reqType)) {
@@ -396,7 +409,7 @@ public class LeaveService {
      * Uses Pessimistic DB Locking on LeaveBalance to prevent race conditions during deduction.
      */
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public LeaveRequest updateStatus(Long requestId, String status, String rejectionReason, Long approverId) {
         String email = "admin@company.com"; // default fallback for tests & super admin
         if (approverId != null) {
@@ -408,7 +421,7 @@ public class LeaveService {
     }
 
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public LeaveRequest updateStatus(Long requestId, String status, String rejectionReason, String actorEmail) {
         LeaveRequest request = leaveRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Leave request not found with id: " + requestId));
@@ -418,6 +431,12 @@ public class LeaveService {
 
         if (previousStatus.equals(newStatus)) {
             return request;
+        }
+
+        if ("CANCELLED".equalsIgnoreCase(previousStatus)
+                || "WITHDRAWN".equalsIgnoreCase(previousStatus)
+                || "REJECTED".equalsIgnoreCase(previousStatus)) {
+            throw new IllegalStateException("Cannot change status of a leave request that is already in terminal state: " + previousStatus);
         }
 
         request.setStatus(newStatus);
@@ -468,13 +487,49 @@ public class LeaveService {
             request.setApprovedBy(actor.getId());
         }
 
+        // Dedicated Handler for CANCEL_REQUESTED Adjudication
+        if ("CANCEL_REQUESTED".equalsIgnoreCase(previousStatus)) {
+            if ("CANCELLED".equalsIgnoreCase(newStatus) || "REJECTED".equalsIgnoreCase(newStatus)) {
+                // Manager agreed to cancel: refund deducted days and clear attendance
+                refundApprovedLeaveDays(request);
+                request.setStatus("CANCELLED");
+                request.setRejectionReason("Cancellation approved by manager: " + (rejectionReason != null ? rejectionReason : ""));
+                LeaveRequest saved = leaveRequestRepository.save(request);
+                if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
+                    eventPublisher.publishEvent(new LeaveWithdrawnEvent(
+                            saved.getEmployeeId(), saved.getStartDate(), saved.getEndDate(), saved.getLeaveType()));
+                }
+                try {
+                    if (targetEmployee != null && targetEmployee.getEmail() != null) {
+                        emailOutboxService.sendLeaveDecisionNotification(
+                                targetEmployee.getEmail(),
+                                targetEmployee.getName(),
+                                saved.getLeaveType(),
+                                saved.getStartDate().toString(),
+                                saved.getEndDate().toString(),
+                                saved.getStatus(),
+                                rejectionReason
+                        );
+                    }
+                } catch (Exception ex) {
+                    log.warn("[Leave Decision] Failed to enqueue employee decision email: {}", ex.getMessage());
+                }
+                return saved;
+            } else if ("APPROVED".equalsIgnoreCase(newStatus)) {
+                // Manager denied cancellation: leave remains approved, skip re-deducting balance
+                request.setStatus("APPROVED");
+                request.setRejectionReason("Cancellation rejected by manager: " + (rejectionReason != null ? rejectionReason : ""));
+                return leaveRequestRepository.save(request);
+            }
+        }
+
         int year = request.getStartDate().getYear();
         double requestedDays = request.getTotalDays() != null ? request.getTotalDays() : 0.0;
         String reqType = request.getLeaveType() != null ? request.getLeaveType().toUpperCase() : "CASUAL";
         boolean isTimeBased = reqType.contains("SHORT") || reqType.contains("EARLY") || reqType.contains("LATE");
 
         if ("APPROVED".equalsIgnoreCase(newStatus)) {
-            var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveType(request.getEmployeeId(), year, reqType);
+            var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveTypeForUpdate(request.getEmployeeId(), year, reqType);
 
             if (specialQuotaOpt.isPresent()) {
                 EmployeeLeaveQuota quota = specialQuotaOpt.get();
@@ -518,51 +573,34 @@ public class LeaveService {
                 }
                 leaveBalanceRepository.save(balance);
             }
-        } else if ("REJECTED".equalsIgnoreCase(newStatus) && "APPROVED".equalsIgnoreCase(previousStatus)) {
-            // Revert/refund used balance because a previously approved leave is now rejected
-            if (!isTimeBased) {
-                var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveType(request.getEmployeeId(), year, reqType);
-                if (specialQuotaOpt.isPresent()) {
-                    EmployeeLeaveQuota quota = specialQuotaOpt.get();
-                    quota.setUsed(Math.max(0.0, quota.getUsed() - requestedDays));
-                    employeeLeaveQuotaRepository.save(quota);
-                } else if (isDynamicQuotaType(reqType)) {
-                    log.info("No special quota record found for refund of dynamic leave {}", reqType);
-                } else {
-                    LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYearForUpdate(request.getEmployeeId(), year)
-                            .orElseGet(() -> getOrCreateLeaveBalance(request.getEmployeeId(), year));
-
-                    String normType = reqType.replaceAll("_LEAVE$", "");
-                    switch (normType) {
-                        case "SICK" -> balance.setSickLeaveUsed(Math.max(0.0, balance.getSickLeaveUsed() - requestedDays));
-                        case "EARNED" -> refundEarnedLeaveWithPriority(balance, requestedDays);
-                        case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0.0, balance.getWorkFromHomeUsed() - requestedDays));
-                        case "UNPAID" -> log.info("Unpaid leave rejected — no balance change for employeeId={}", request.getEmployeeId());
-                        case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.setRestrictedHolidayUsed(Math.max(0.0, balance.getRestrictedHolidayUsed() - requestedDays));
-                        default -> balance.setCasualLeaveUsed(Math.max(0.0, balance.getCasualLeaveUsed() - requestedDays));
-                    }
-                    leaveBalanceRepository.save(balance);
-                }
-                log.info("Refunded {} days of {} leave to employeeId={} due to rejection of approved leave.", requestedDays, reqType, request.getEmployeeId());
+        } else if ("CANCELLED".equalsIgnoreCase(newStatus) || "REJECTED".equalsIgnoreCase(newStatus)) {
+            // Revert/refund used balance ONLY if it was previously approved
+            if ("APPROVED".equalsIgnoreCase(previousStatus)) {
+                refundApprovedLeaveDays(request);
             }
         }
 
         LeaveRequest saved = leaveRequestRepository.save(request);
 
         if ("APPROVED".equalsIgnoreCase(saved.getStatus())) {
-            eventPublisher.publishEvent(new LeaveApprovedEvent(
-                    saved.getEmployeeId(),
-                    saved.getStartDate(),
-                    saved.getEndDate(),
-                    saved.getLeaveType()
-            ));
-        } else if ("REJECTED".equalsIgnoreCase(saved.getStatus()) && "APPROVED".equalsIgnoreCase(previousStatus)) {
-            eventPublisher.publishEvent(new LeaveWithdrawnEvent(
-                    saved.getEmployeeId(),
-                    saved.getStartDate(),
-                    saved.getEndDate(),
-                    saved.getLeaveType()
-            ));
+            if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
+                eventPublisher.publishEvent(new LeaveApprovedEvent(
+                        saved.getEmployeeId(),
+                        saved.getStartDate(),
+                        saved.getEndDate(),
+                        saved.getLeaveType()
+                ));
+            }
+        } else if (("REJECTED".equalsIgnoreCase(saved.getStatus()) || "CANCELLED".equalsIgnoreCase(saved.getStatus()))
+                && ("APPROVED".equalsIgnoreCase(previousStatus) || "CANCEL_REQUESTED".equalsIgnoreCase(previousStatus))) {
+            if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
+                eventPublisher.publishEvent(new LeaveWithdrawnEvent(
+                        saved.getEmployeeId(),
+                        saved.getStartDate(),
+                        saved.getEndDate(),
+                        saved.getLeaveType()
+                ));
+            }
         }
 
         try {
@@ -620,7 +658,7 @@ public class LeaveService {
 
     @Transactional(readOnly = true)
     public List<LeaveRequestDto> getAllPendingRequests() {
-        List<LeaveRequest> requests = leaveRequestRepository.findByStatusOrderByCreatedAtDesc("PENDING");
+        List<LeaveRequest> requests = leaveRequestRepository.findAllPendingOrCancelRequested();
         java.util.Map<Long, Employee> empMap = getEmployeesMapForRequests(requests);
         return requests.stream().map(req -> mapToDto(req, empMap)).toList();
     }
@@ -669,7 +707,7 @@ public class LeaveService {
     }
 
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public void bulkGrantLeaves(String leaveType, int grantDays, List<Long> excludedEmployeeIds) {
         int currentYear = LocalDate.now().getYear();
         List<Employee> employees = employeeRepository.findAll();
@@ -702,7 +740,7 @@ public class LeaveService {
     }
 
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public LeaveRequest applyOnBehalfByHr(LeaveRequest request) {
         request.setId(null);
         request.setStatus("APPROVED");
@@ -711,6 +749,12 @@ public class LeaveService {
         if (request.getStartDate() == null || request.getEndDate() == null) {
             request.setStartDate(LocalDate.now());
             request.setEndDate(LocalDate.now());
+        }
+        if (request.getEndDate().isBefore(request.getStartDate())) {
+            throw new IllegalArgumentException("End date cannot be before start date");
+        }
+        if (request.getStartDate().getYear() != request.getEndDate().getYear()) {
+            throw new IllegalArgumentException("Leave requests cannot span across calendar years (Dec 31 / Jan 1). Please submit two separate requests for each respective year.");
         }
 
         String onBehalfType = request.getLeaveType() != null ? request.getLeaveType().toUpperCase().replaceAll("[ -]", "_") : "";
@@ -735,8 +779,9 @@ public class LeaveService {
             }
         }
 
-        // Validate session overlaps
-        validateSessionOverlap(request, isTimeBased);
+        // Execute pluggable LeavePolicyEngine rules
+        Employee emp = employeeRepository.findById(request.getEmployeeId()).orElse(null);
+        leavePolicyEngine.validateRequest(request, emp);
 
         if (request.getLeaveType() == null || request.getLeaveType().isBlank()) {
             request.setLeaveType("CASUAL");
@@ -752,35 +797,65 @@ public class LeaveService {
                 .orElseGet(() -> getOrCreateLeaveBalance(request.getEmployeeId(), year));
 
         if (!isTimeBased) {
-            String normType = request.getLeaveType().toUpperCase().replaceAll("_LEAVE$", "");
-            switch (normType) {
-                case "SICK" -> {
-                    if (balance.getSickLeaveRemaining() < daysToApply) {
-                        throw new IllegalStateException("Cannot apply: Insufficient sick leave balance for employee.");
-                    }
-                    balance.setSickLeaveUsed(balance.getSickLeaveUsed() + daysToApply);
+            String rawType = request.getLeaveType().toUpperCase();
+
+            // Tier 1: Dynamic quota types (COMP_OFF, MATERNITY, PATERNITY, BEREAVEMENT, BIRTHDAY …)
+            //         These are tracked in EmployeeLeaveQuota with PESSIMISTIC_WRITE lock
+            var specialQuotaOpt = employeeLeaveQuotaRepository
+                    .findByEmployeeIdAndYearAndLeaveTypeForUpdate(request.getEmployeeId(), year, rawType);
+
+            if (specialQuotaOpt.isPresent()) {
+                EmployeeLeaveQuota quota = specialQuotaOpt.get();
+                if (quota.getRemaining() < daysToApply) {
+                    throw new IllegalStateException(
+                            "Cannot apply: Insufficient " + rawType + " leave balance for employee.");
                 }
-                case "EARNED" -> deductEarnedLeaveWithPriority(balance, daysToApply, request.getStartDate(), request.getEndDate());
-                case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(balance.getWorkFromHomeUsed() + daysToApply);
-                case "UNPAID" -> log.info("Unpaid leave applied on behalf for employeeId={}", request.getEmployeeId());
-                default -> {
-                    if (balance.getCasualLeaveRemaining() < daysToApply) {
-                        throw new IllegalStateException("Cannot apply: Insufficient casual leave balance for employee.");
+                quota.setUsed(quota.getUsed() + daysToApply);
+                employeeLeaveQuotaRepository.save(quota);
+            } else if (isDynamicQuotaType(rawType)) {
+                // Dynamic type but no quota row has been allocated yet
+                throw new IllegalStateException(
+                        "Cannot apply: Employee has no allocated quota for " + rawType + ".");
+            } else {
+                // Tier 2: Standard balance-table types
+                String normType = rawType.replaceAll("_LEAVE$", "");
+                switch (normType) {
+                    case "SICK" -> {
+                        if (balance.getSickLeaveRemaining() < daysToApply) {
+                            throw new IllegalStateException("Cannot apply: Insufficient sick leave balance for employee.");
+                        }
+                        balance.setSickLeaveUsed(balance.getSickLeaveUsed() + daysToApply);
                     }
-                    balance.setCasualLeaveUsed(balance.getCasualLeaveUsed() + daysToApply);
+                    case "EARNED" -> deductEarnedLeaveWithPriority(balance, daysToApply, request.getStartDate(), request.getEndDate());
+                    case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(balance.getWorkFromHomeUsed() + daysToApply);
+                    case "UNPAID" -> log.info("Unpaid leave applied on behalf for employeeId={}", request.getEmployeeId());
+                    case "RESTRICTED_HOLIDAY", "RESTRICTED" -> {
+                        if (balance.getRestrictedHolidayRemaining() < daysToApply) {
+                            throw new IllegalStateException("Cannot apply: Insufficient restricted holiday balance for employee.");
+                        }
+                        balance.setRestrictedHolidayUsed(balance.getRestrictedHolidayUsed() + daysToApply);
+                    }
+                    default -> {
+                        if (balance.getCasualLeaveRemaining() < daysToApply) {
+                            throw new IllegalStateException("Cannot apply: Insufficient casual leave balance for employee.");
+                        }
+                        balance.setCasualLeaveUsed(balance.getCasualLeaveUsed() + daysToApply);
+                    }
                 }
+                leaveBalanceRepository.save(balance);
             }
-            leaveBalanceRepository.save(balance);
         }
 
         LeaveRequest saved = leaveRequestRepository.save(request);
 
-        eventPublisher.publishEvent(new LeaveApprovedEvent(
-                saved.getEmployeeId(),
-                saved.getStartDate(),
-                saved.getEndDate(),
-                saved.getLeaveType()
-        ));
+        if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
+            eventPublisher.publishEvent(new LeaveApprovedEvent(
+                    saved.getEmployeeId(),
+                    saved.getStartDate(),
+                    saved.getEndDate(),
+                    saved.getLeaveType()
+            ));
+        }
 
         return saved;
     }
@@ -791,7 +866,19 @@ public class LeaveService {
      * - APPROVED leaves cannot be withdrawn by employees (must be cancelled/withdrawn administratively by HR/Admin).
      */
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
+    public LeaveRequest withdrawApprovedLeave(Long requestId, String actorEmail) {
+        Long actorId = null;
+        if (actorEmail != null && !"admin@company.com".equalsIgnoreCase(actorEmail)) {
+            actorId = employeeRepository.findByEmail(actorEmail)
+                    .map(Employee::getId)
+                    .orElse(null);
+        }
+        return withdrawApprovedLeave(requestId, actorId);
+    }
+
+    @Transactional
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public LeaveRequest withdrawApprovedLeave(Long requestId, Long actorId) {
         LeaveRequest request = leaveRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Leave request not found: " + requestId));
@@ -815,7 +902,7 @@ public class LeaveService {
                 int year = request.getStartDate().getYear();
                 double daysToCredit = request.getTotalDays() != null ? request.getTotalDays() : 0.0;
 
-                var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveType(request.getEmployeeId(), year, type);
+                var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveTypeForUpdate(request.getEmployeeId(), year, type);
                 if (specialQuotaOpt.isPresent()) {
                     EmployeeLeaveQuota quota = specialQuotaOpt.get();
                     quota.setUsed(Math.max(0, quota.getUsed() - daysToCredit));
@@ -846,26 +933,28 @@ public class LeaveService {
         LeaveRequest saved = leaveRequestRepository.save(request);
 
         leavePolicyEngine.handleStatusChange(saved, status, "WITHDRAWN");
-        eventPublisher.publishEvent(new LeaveWithdrawnEvent(
-                saved.getEmployeeId(),
-                saved.getStartDate(),
-                saved.getEndDate(),
-                saved.getLeaveType()
-        ));
+        if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
+            eventPublisher.publishEvent(new LeaveWithdrawnEvent(
+                    saved.getEmployeeId(),
+                    saved.getStartDate(),
+                    saved.getEndDate(),
+                    saved.getLeaveType()
+            ));
+        }
 
         return saved;
     }
 
 
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
-    public LeaveBalance adjustEmployeeBalance(Long employeeId, String leaveType, int adjustmentDays) {
+    @CacheEvict(value = "leave_balances", allEntries = true)
+    public LeaveBalance adjustEmployeeBalance(Long employeeId, String leaveType, double adjustmentDays) {
         int year = LocalDate.now().getYear();
         String upperType = leaveType.toUpperCase();
 
         if (isDynamicQuotaType(upperType)) {
             EmployeeLeaveQuota quota = employeeLeaveQuotaRepository
-                    .findByEmployeeIdAndYearAndLeaveType(employeeId, year, upperType)
+                    .findByEmployeeIdAndYearAndLeaveTypeForUpdate(employeeId, year, upperType)
                     .orElseGet(() -> EmployeeLeaveQuota.builder()
                             .employeeId(employeeId)
                             .year(year)
@@ -878,6 +967,7 @@ public class LeaveService {
             return getOrCreateLeaveBalance(employeeId, year);
         }
 
+        leaveBalanceRepository.findByEmployeeIdAndYearForUpdate(employeeId, year);
         LeaveBalance balance = getOrCreateLeaveBalance(employeeId, year);
 
         switch (upperType) {
@@ -889,6 +979,100 @@ public class LeaveService {
         }
 
         return leaveBalanceRepository.save(balance);
+    }
+
+    @Transactional
+    @CacheEvict(value = "leave_balances", allEntries = true)
+    public LeaveBalance adjustEmployeeBalance(Long employeeId, String leaveType, double adjustmentDays, String reason) {
+        log.info("Adjusting balance for employee {} leaveType {} by {} days. Reason: {}", employeeId, leaveType, adjustmentDays, reason);
+        return adjustEmployeeBalance(employeeId, leaveType, adjustmentDays);
+    }
+
+    /**
+     * Validates that the caller has ownership (self) or privileged authority (Manager/HR/Admin)
+     * to view the given employee's confidential leave requests and balance.
+     */
+    public void validateOwnershipOrPrivilege(Long targetEmployeeId, String callerEmail) {
+        if (callerEmail == null || "admin@company.com".equalsIgnoreCase(callerEmail)) {
+            return; // System Super Admin / test fallback
+        }
+
+        Employee caller = employeeRepository.findByEmail(callerEmail).orElse(null);
+        if (caller == null) {
+            var userOpt = userRepository.findByEmail(callerEmail);
+            if (userOpt.isPresent() && (
+                    "ADMIN".equalsIgnoreCase(userOpt.get().getRole())
+                    || "ROLE_ADMIN".equalsIgnoreCase(userOpt.get().getRole())
+                    || "SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole())
+                    || "ROLE_SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole()))) {
+                return;
+            }
+            throw new org.springframework.security.access.AccessDeniedException("Authenticated caller not found: " + callerEmail);
+        }
+
+        // Privileged roles can view any employee's records
+        if ("SUPER_ADMIN".equalsIgnoreCase(caller.getRole())
+                || "ADMIN".equalsIgnoreCase(caller.getRole())
+                || "HR".equalsIgnoreCase(caller.getRole())
+                || "SUPER_ADMIN".equalsIgnoreCase(caller.getSystemRole())
+                || "ADMIN".equalsIgnoreCase(caller.getSystemRole())
+                || employeeAuthorityRepository.existsByEmployeeIdAndAuthority(caller.getId(), "LEAVE_APPROVE_ALL")) {
+            return;
+        }
+
+        // Self-access
+        if (caller.getId().equals(targetEmployeeId)) {
+            return;
+        }
+
+        // Manager accessing direct report
+        Employee target = employeeRepository.findById(targetEmployeeId).orElse(null);
+        if (target != null && target.getManager() != null && target.getManager().getId().equals(caller.getId())) {
+            return;
+        }
+
+        throw new org.springframework.security.access.AccessDeniedException(
+                "Access Denied: You do not have permission to view leave records for employee ID: " + targetEmployeeId);
+    }
+
+    /**
+     * Validates that the caller is authorized to view the pending queue for the specified manager.
+     */
+    public void validateManagerAccess(Long targetManagerId, String callerEmail) {
+        if (callerEmail == null || "admin@company.com".equalsIgnoreCase(callerEmail)) {
+            return; // System Super Admin / test fallback
+        }
+
+        Employee caller = employeeRepository.findByEmail(callerEmail).orElse(null);
+        if (caller == null) {
+            var userOpt = userRepository.findByEmail(callerEmail);
+            if (userOpt.isPresent() && (
+                    "ADMIN".equalsIgnoreCase(userOpt.get().getRole())
+                    || "ROLE_ADMIN".equalsIgnoreCase(userOpt.get().getRole())
+                    || "SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole())
+                    || "ROLE_SUPER_ADMIN".equalsIgnoreCase(userOpt.get().getRole()))) {
+                return;
+            }
+            throw new org.springframework.security.access.AccessDeniedException("Authenticated caller not found: " + callerEmail);
+        }
+
+        // Privileged roles can inspect any manager's pending queue
+        if ("SUPER_ADMIN".equalsIgnoreCase(caller.getRole())
+                || "ADMIN".equalsIgnoreCase(caller.getRole())
+                || "HR".equalsIgnoreCase(caller.getRole())
+                || "SUPER_ADMIN".equalsIgnoreCase(caller.getSystemRole())
+                || "ADMIN".equalsIgnoreCase(caller.getSystemRole())
+                || employeeAuthorityRepository.existsByEmployeeIdAndAuthority(caller.getId(), "LEAVE_APPROVE_ALL")) {
+            return;
+        }
+
+        // The designated manager themselves
+        if (caller.getId().equals(targetManagerId)) {
+            return;
+        }
+
+        throw new org.springframework.security.access.AccessDeniedException(
+                "Access Denied: You do not have permission to access pending queue for manager ID: " + targetManagerId);
     }
 
     public boolean isDynamicQuotaType(String type) {
@@ -1048,102 +1232,6 @@ public class LeaveService {
         return Math.max(0.5, rawDays + adjustment);
     }
 
-    private void validateSessionOverlap(LeaveRequest newReq, boolean isTimeBased) {
-        List<LeaveRequest> existingLeaves = leaveRequestRepository.findOverlappingLeaves(
-                newReq.getEmployeeId(), newReq.getStartDate(), newReq.getEndDate());
-
-        if (existingLeaves.isEmpty()) {
-            return;
-        }
-
-        for (LocalDate date = newReq.getStartDate(); !date.isAfter(newReq.getEndDate()); date = date.plusDays(1)) {
-            boolean newS1 = false;
-            boolean newS2 = false;
-
-            if (isTimeBased) {
-                if (newReq.getStartTime() != null) {
-                    if (newReq.getStartTime().isBefore(LocalTime.of(13, 30))) {
-                        newS1 = true;
-                    } else {
-                        newS2 = true;
-                    }
-                } else {
-                    newS1 = true;
-                    newS2 = true;
-                }
-            } else {
-                if (date.isAfter(newReq.getStartDate()) && date.isBefore(newReq.getEndDate())) {
-                    // Middle days: always full day
-                    newS1 = true;
-                    newS2 = true;
-                } else if (newReq.getStartDate().equals(newReq.getEndDate())) {
-                    // Same-day: use normalized session helpers
-                    boolean hasS1 = isSession1(newReq.getStartSession()) || isSession1(newReq.getEndSession());
-                    boolean hasS2 = isSession2(newReq.getStartSession()) || isSession2(newReq.getEndSession());
-                    boolean isHalf = (newReq.getTotalDays() != null && newReq.getTotalDays() <= 0.5) || (hasS1 != hasS2);
-                    if (isHalf) {
-                        newS1 = !(hasS2 && !hasS1);
-                        newS2 = (hasS2 && !hasS1);
-                    } else {
-                        newS1 = true;
-                        newS2 = true;
-                    }
-                } else if (date.equals(newReq.getStartDate())) {
-                    newS1 = !isSession2(newReq.getStartSession()); // S1 unless explicitly starting S2
-                    newS2 = true;
-                } else if (date.equals(newReq.getEndDate())) {
-                    newS1 = true;
-                    newS2 = !isSession1(newReq.getEndSession()); // S2 unless explicitly ending S1
-                }
-            }
-
-            for (LeaveRequest existing : existingLeaves) {
-                if (!date.isBefore(existing.getStartDate()) && !date.isAfter(existing.getEndDate())) {
-                    boolean extS1 = false;
-                    boolean extS2 = false;
-
-                    if (Boolean.TRUE.equals(existing.getIsTimeBased())) {
-                        if (existing.getStartTime() != null) {
-                            if (existing.getStartTime().isBefore(LocalTime.of(13, 30))) {
-                                extS1 = true;
-                            } else {
-                                extS2 = true;
-                            }
-                        } else {
-                            extS1 = true;
-                            extS2 = true;
-                        }
-                    } else if (date.isAfter(existing.getStartDate()) && date.isBefore(existing.getEndDate())) {
-                        extS1 = true;
-                        extS2 = true;
-                    } else if (existing.getStartDate().equals(existing.getEndDate())) {
-                        boolean hasS1 = isSession1(existing.getStartSession()) || isSession1(existing.getEndSession());
-                        boolean hasS2 = isSession2(existing.getStartSession()) || isSession2(existing.getEndSession());
-                        boolean isHalf = (existing.getTotalDays() != null && existing.getTotalDays() <= 0.5) || (hasS1 != hasS2);
-                        if (isHalf) {
-                            extS1 = !(hasS2 && !hasS1);
-                            extS2 = (hasS2 && !hasS1);
-                        } else {
-                            extS1 = true;
-                            extS2 = true;
-                        }
-                    } else if (date.equals(existing.getStartDate())) {
-                        extS1 = !isSession2(existing.getStartSession());
-                        extS2 = true;
-                    } else if (date.equals(existing.getEndDate())) {
-                        extS1 = true;
-                        extS2 = !isSession1(existing.getEndSession());
-                    }
-
-                    if ((newS1 && extS1) || (newS2 && extS2)) {
-                        throw new IllegalStateException(
-                            "Leave conflict on " + date + ": A request is already PENDING/APPROVED for the same session.");
-                    }
-                }
-            }
-        }
-    }
-
     private LocalDate[] computeCycleDateRange(LocalDate requestDate, String cycle) {
         return switch (cycle.toUpperCase()) {
             case "QUARTERLY" -> {
@@ -1211,57 +1299,135 @@ public class LeaveService {
     }
 
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details", "leave_balances"}, allEntries = true)
+    @CacheEvict(value = "leave_balances", allEntries = true)
     public LeaveRequest cancelLeaveRequest(Long requestId, Long actorId) {
+        String actorEmail = null;
+        if (actorId != null) {
+            actorEmail = employeeRepository.findById(actorId).map(Employee::getEmail).orElse(null);
+        }
+        return cancelLeaveRequest(requestId, actorEmail, null);
+    }
+
+    @Transactional
+    @CacheEvict(value = "leave_balances", allEntries = true)
+    public LeaveRequest cancelLeaveRequest(Long requestId, String actorEmail, String reason) {
         LeaveRequest request = leaveRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Leave request not found with id: " + requestId));
 
         String oldStatus = request.getStatus() != null ? request.getStatus().toUpperCase() : "PENDING";
-        if ("CANCELLED".equals(oldStatus) || "REJECTED".equals(oldStatus)) {
+        if ("CANCELLED".equals(oldStatus) || "REJECTED".equals(oldStatus) || "WITHDRAWN".equals(oldStatus)) {
             throw new IllegalStateException("Leave request is already " + oldStatus);
         }
 
-        // Refund used balance if the request was previously APPROVED
-        if ("APPROVED".equals(oldStatus)) {
-            int year = request.getStartDate().getYear();
-            double requestedDays = request.getTotalDays() != null ? request.getTotalDays() : 0.0;
-            String reqType = request.getLeaveType() != null ? request.getLeaveType().toUpperCase() : "CASUAL";
-            boolean isTimeBased = Boolean.TRUE.equals(request.getIsTimeBased());
+        Employee actor = (actorEmail != null) ? employeeRepository.findByEmail(actorEmail).orElse(null) : null;
+        boolean isSysAdmin = false;
+        if (actor == null && actorEmail != null) {
+            isSysAdmin = "admin@company.com".equalsIgnoreCase(actorEmail)
+                    || userRepository.findByEmail(actorEmail)
+                    .map(u -> u.getRole() != null && (u.getRole().contains("ADMIN") || u.getRole().contains("SUPER_ADMIN")))
+                    .orElse(false);
+        }
 
-            if (!isTimeBased && requestedDays > 0) {
-                var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveType(request.getEmployeeId(), year, reqType);
-                if (specialQuotaOpt.isPresent()) {
-                    var quota = specialQuotaOpt.get();
-                    quota.setUsed(Math.max(0.0, quota.getUsed() - requestedDays));
-                    employeeLeaveQuotaRepository.save(quota);
-                } else {
-                    LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYearForUpdate(request.getEmployeeId(), year)
-                            .orElseGet(() -> getOrCreateLeaveBalance(request.getEmployeeId(), year));
-                    String normType = reqType.replaceAll("_LEAVE$", "");
-                    switch (normType) {
-                        case "SICK" -> balance.setSickLeaveUsed(Math.max(0.0, balance.getSickLeaveUsed() - requestedDays));
-                        case "EARNED" -> refundEarnedLeaveWithPriority(balance, requestedDays);
-                        case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0.0, balance.getWorkFromHomeUsed() - requestedDays));
-                        case "UNPAID" -> log.info("Unpaid leave cancelled — no balance change for employeeId={}", request.getEmployeeId());
-                        case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.setRestrictedHolidayUsed(Math.max(0.0, balance.getRestrictedHolidayUsed() - requestedDays));
-                        default -> balance.setCasualLeaveUsed(Math.max(0.0, balance.getCasualLeaveUsed() - requestedDays));
-                    }
-                    leaveBalanceRepository.save(balance);
+        boolean isManagerOrAdmin = isSysAdmin || (actor != null && (
+                "HR".equalsIgnoreCase(actor.getRole())
+                || "SUPER_ADMIN".equalsIgnoreCase(actor.getRole())
+                || "ADMIN".equalsIgnoreCase(actor.getSystemRole())
+                || "SUPER_ADMIN".equalsIgnoreCase(actor.getSystemRole())
+                || employeeAuthorityRepository.existsByEmployeeIdAndAuthority(actor.getId(), "LEAVE_APPROVE_ALL")
+        ));
+
+        Employee targetEmployee = employeeRepository.findById(request.getEmployeeId()).orElse(null);
+        if (!isManagerOrAdmin && actor != null && targetEmployee != null && targetEmployee.getManager() != null) {
+            isManagerOrAdmin = actor.getId().equals(targetEmployee.getManager().getId());
+        }
+
+        boolean isOwner = actor != null && actor.getId().equals(request.getEmployeeId());
+
+        // Authorization check: Actor must be either the owner or a manager/admin
+        if (!isOwner && !isManagerOrAdmin) {
+            throw new org.springframework.security.access.AccessDeniedException("You are not authorized to cancel this leave request.");
+        }
+
+        // Two-Phase Workflow for APPROVED leaves:
+        if ("APPROVED".equals(oldStatus)) {
+            if (!isManagerOrAdmin) {
+                // Employee self-initiating cancellation on an already APPROVED leave:
+                // Cannot cancel directly and cannot self-refund used days! Must submit a Cancellation Request.
+                request.setStatus("CANCEL_REQUESTED");
+                if (reason != null && !reason.isBlank()) {
+                    request.setReason((request.getReason() != null ? request.getReason() + " | Cancellation Reason: " : "Cancellation Reason: ") + reason);
                 }
-                log.info("Refunded {} days of {} leave to employeeId={} due to cancellation of approved request ID={}",
-                        requestedDays, reqType, request.getEmployeeId(), requestId);
+                LeaveRequest saved = leaveRequestRepository.save(request);
+                log.info("Employee ID={} submitted cancellation request for approved leave ID={}", request.getEmployeeId(), requestId);
+
+                // Notify manager of cancellation request
+                try {
+                    if (targetEmployee != null && targetEmployee.getManager() != null) {
+                        Employee mgr = targetEmployee.getManager();
+                        emailOutboxService.sendLeaveDecisionNotification(
+                                mgr.getEmail(), mgr.getName(), request.getLeaveType(),
+                                request.getStartDate().toString(), request.getEndDate().toString(),
+                                "CANCEL_REQUESTED", (reason != null ? reason : "Employee requested cancellation of approved leave.")
+                        );
+                    }
+                } catch (Exception ex) {
+                    log.warn("Failed to notify manager of cancellation request: {}", ex.getMessage());
+                }
+                return saved;
             }
+
+            // Manager / Admin direct cancellation of APPROVED leave: refund used days
+            refundApprovedLeaveDays(request);
+        } else if ("CANCEL_REQUESTED".equals(oldStatus)) {
+            if (!isManagerOrAdmin) {
+                throw new IllegalStateException("Cancellation has already been requested for this leave. Please await manager review.");
+            }
+            // Manager/Admin approves the cancellation request: refund used days
+            refundApprovedLeaveDays(request);
         }
 
         request.setStatus("CANCELLED");
         LeaveRequest saved = leaveRequestRepository.save(request);
 
         leavePolicyEngine.handleStatusChange(saved, oldStatus, "CANCELLED");
-        eventPublisher.publishEvent(new com.example.hr_management_backend.features.leaves.event.LeaveWithdrawnEvent(
-                saved.getEmployeeId(), saved.getStartDate(), saved.getEndDate(), saved.getLeaveType()
-        ));
+        if (!Boolean.TRUE.equals(saved.getIsTimeBased())) {
+            eventPublisher.publishEvent(new com.example.hr_management_backend.features.leaves.event.LeaveWithdrawnEvent(
+                    saved.getEmployeeId(), saved.getStartDate(), saved.getEndDate(), saved.getLeaveType()
+            ));
+        }
 
         return saved;
+    }
+
+    private void refundApprovedLeaveDays(LeaveRequest request) {
+        int year = request.getStartDate().getYear();
+        double requestedDays = request.getTotalDays() != null ? request.getTotalDays() : 0.0;
+        String reqType = request.getLeaveType() != null ? request.getLeaveType().toUpperCase() : "CASUAL";
+        boolean isTimeBased = Boolean.TRUE.equals(request.getIsTimeBased());
+
+        if (!isTimeBased && requestedDays > 0) {
+            var specialQuotaOpt = employeeLeaveQuotaRepository.findByEmployeeIdAndYearAndLeaveTypeForUpdate(request.getEmployeeId(), year, reqType);
+            if (specialQuotaOpt.isPresent()) {
+                var quota = specialQuotaOpt.get();
+                quota.setUsed(Math.max(0.0, quota.getUsed() - requestedDays));
+                employeeLeaveQuotaRepository.save(quota);
+            } else {
+                LeaveBalance balance = leaveBalanceRepository.findByEmployeeIdAndYearForUpdate(request.getEmployeeId(), year)
+                        .orElseGet(() -> getOrCreateLeaveBalance(request.getEmployeeId(), year));
+                String normType = reqType.replaceAll("_LEAVE$", "");
+                switch (normType) {
+                    case "SICK" -> balance.setSickLeaveUsed(Math.max(0.0, balance.getSickLeaveUsed() - requestedDays));
+                    case "EARNED" -> refundEarnedLeaveWithPriority(balance, requestedDays);
+                    case "WORK_FROM_HOME", "WFH" -> balance.setWorkFromHomeUsed(Math.max(0.0, balance.getWorkFromHomeUsed() - requestedDays));
+                    case "UNPAID" -> log.info("Unpaid leave cancelled — no balance change for employeeId={}", request.getEmployeeId());
+                    case "RESTRICTED_HOLIDAY", "RESTRICTED" -> balance.setRestrictedHolidayUsed(Math.max(0.0, balance.getRestrictedHolidayUsed() - requestedDays));
+                    default -> balance.setCasualLeaveUsed(Math.max(0.0, balance.getCasualLeaveUsed() - requestedDays));
+                }
+                leaveBalanceRepository.save(balance);
+            }
+            log.info("Refunded {} days of {} leave to employeeId={} due to cancellation/rejection of request ID={}",
+                    requestedDays, reqType, request.getEmployeeId(), request.getId());
+        }
     }
 
     @Transactional

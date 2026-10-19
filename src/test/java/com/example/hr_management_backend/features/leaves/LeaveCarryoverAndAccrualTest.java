@@ -432,6 +432,7 @@ public class LeaveCarryoverAndAccrualTest {
         req = leaveRequestRepository.save(req);
 
         leaveService.cancelLeaveRequest(req.getId(), testEmployee.getId());
+        leaveService.updateStatus(req.getId(), "CANCELLED", "Cancellation approved by manager", "admin@company.com");
 
         LeaveBalance reloaded = leaveBalanceRepository.findByEmployeeIdAndYear(testEmployee.getId(), year).orElseThrow();
         assertEquals(0.0, reloaded.getRestrictedHolidayUsed(), "Restricted holiday used must be refunded to 0.0");

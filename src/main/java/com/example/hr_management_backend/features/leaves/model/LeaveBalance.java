@@ -88,6 +88,14 @@ public class LeaveBalance {
 
     @Transient
     @Builder.Default
+    private Double earnedLeavePendingPreExpiry = 0.0;
+
+    @Transient
+    @Builder.Default
+    private Double earnedLeavePendingPostExpiry = 0.0;
+
+    @Transient
+    @Builder.Default
     private Double workFromHomePending = 0.0;
 
     @Transient
@@ -142,30 +150,44 @@ public class LeaveBalance {
 
     /**
      * Unconsumed carried forward leave remaining after allocating pending requests with priority (FIFO).
+     * Only pending requests that fall ON OR BEFORE the expiry date (March 31st) can draw from carried forward leaves.
      */
     public double getCarriedForwardLeaveRemaining() {
         double activeCarried = getActiveCarriedForwardBalance();
         if (activeCarried <= 0.0) {
             return 0.0;
         }
-        double pending = earnedLeavePending != null ? earnedLeavePending : 0.0;
-        double pendingOnCarried = Math.min(activeCarried, pending);
+        double preExpiryPending = (earnedLeavePendingPreExpiry != null && earnedLeavePendingPreExpiry > 0.0)
+                ? earnedLeavePendingPreExpiry
+                : (earnedLeavePending != null ? earnedLeavePending : 0.0);
+        double pendingOnCarried = Math.min(activeCarried, preExpiryPending);
         return Math.max(0.0, activeCarried - pendingOnCarried);
     }
 
     /**
-     * Remaining current year earned leaves. Pending leaves only deduct from current year
-     * after the active carried-forward balance has been fully reserved.
+     * Remaining current year earned leaves.
+     * 1. Any pre-expiry pending leaves that exceed active carried forward balance roll over to deduct from current year.
+     * 2. All post-expiry pending leaves strictly deduct directly from current year quota.
      */
     public double getCurrentYearEarnedLeaveRemaining() {
         double quota = earnedLeaveQuota != null ? earnedLeaveQuota : 6.0;
         double used = earnedLeaveUsed != null ? earnedLeaveUsed : 0.0;
-        double pending = earnedLeavePending != null ? earnedLeavePending : 0.0;
+
+        double preExpiryPending = earnedLeavePendingPreExpiry != null ? earnedLeavePendingPreExpiry : 0.0;
+        double postExpiryPending = earnedLeavePendingPostExpiry != null ? earnedLeavePendingPostExpiry : 0.0;
+
+        // Fallback for legacy calls when pre/post are not segregated
+        if (preExpiryPending == 0.0 && postExpiryPending == 0.0 && earnedLeavePending != null && earnedLeavePending > 0.0) {
+            double activeCarried = getActiveCarriedForwardBalance();
+            double remainingPending = Math.max(0.0, earnedLeavePending - activeCarried);
+            return Math.max(0.0, quota - used - remainingPending);
+        }
 
         double activeCarried = getActiveCarriedForwardBalance();
-        double remainingPendingForCurrentYear = Math.max(0.0, pending - activeCarried);
+        double preExpiryOverflow = Math.max(0.0, preExpiryPending - activeCarried);
+        double totalDeductionsFromCurrentYear = preExpiryOverflow + postExpiryPending;
 
-        return Math.max(0.0, quota - used - remainingPendingForCurrentYear);
+        return Math.max(0.0, quota - used - totalDeductionsFromCurrentYear);
     }
 
     /**

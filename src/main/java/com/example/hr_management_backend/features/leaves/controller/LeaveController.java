@@ -32,9 +32,12 @@ public class LeaveController {
     }
 
     @GetMapping("/balance/{employeeId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<LeaveBalance> getLeaveBalance(
             @PathVariable Long employeeId,
             @RequestParam(required = false) Integer year) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        leaveService.validateOwnershipOrPrivilege(employeeId, auth != null ? auth.getName() : null);
         int activeYear = (year != null) ? year : Year.now().getValue();
         return ResponseEntity.ok()
                 .header("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
@@ -52,7 +55,7 @@ public class LeaveController {
         String rejectionReason = body.get("rejectionReason");
         
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String actorEmail = auth.getName();
+        String actorEmail = auth != null ? auth.getName() : null;
 
         LeaveRequest updated = leaveService.updateStatus(id, status, rejectionReason, actorEmail);
         return ResponseEntity.ok(updated);
@@ -63,23 +66,34 @@ public class LeaveController {
     public ResponseEntity<LeaveRequest> cancelLeaveRequest(
             @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> body) {
-        Long actorId = null;
-        if (body != null && body.containsKey("actorId")) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String actorEmail = (auth != null) ? auth.getName() : null;
+        String reason = (body != null) ? body.get("reason") : null;
+
+        // Fallback for non-authenticated test calls providing actorId
+        if (actorEmail == null && body != null && body.containsKey("actorId")) {
             try {
-                actorId = Long.parseLong(body.get("actorId"));
+                Long actorId = Long.parseLong(body.get("actorId"));
+                return ResponseEntity.ok(leaveService.cancelLeaveRequest(id, actorId));
             } catch (Exception ignored) {}
         }
-        return ResponseEntity.ok(leaveService.cancelLeaveRequest(id, actorId));
+
+        return ResponseEntity.ok(leaveService.cancelLeaveRequest(id, actorEmail, reason));
     }
 
     @GetMapping("/employee/{employeeId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
     public ResponseEntity<List<LeaveRequest>> getLeavesByEmployee(@PathVariable Long employeeId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        leaveService.validateOwnershipOrPrivilege(employeeId, auth != null ? auth.getName() : null);
         return ResponseEntity.ok(leaveService.getLeavesByEmployee(employeeId));
     }
 
     @GetMapping("/pending/manager/{managerId}")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER')")
     public ResponseEntity<List<com.example.hr_management_backend.features.leaves.dto.LeaveRequestDto>> getPendingForManager(@PathVariable Long managerId) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        leaveService.validateManagerAccess(managerId, auth != null ? auth.getName() : null);
         return ResponseEntity.ok(leaveService.getPendingForManager(managerId));
     }
 
@@ -90,6 +104,7 @@ public class LeaveController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<List<LeaveRequest>> getAllLeaveRequests() {
         return ResponseEntity.ok(leaveService.getAllLeaveRequests());
     }
@@ -120,16 +135,22 @@ public class LeaveController {
     public ResponseEntity<LeaveBalance> adjustEmployeeBalance(@RequestBody Map<String, Object> body) {
         Long employeeId = ((Number) body.get("employeeId")).longValue();
         String leaveType = (String) body.getOrDefault("leaveType", "CASUAL");
-        int adjustmentDays = ((Number) body.getOrDefault("adjustmentDays", 0)).intValue();
+        double adjustmentDays = ((Number) body.getOrDefault("adjustmentDays", 0.0)).doubleValue();
+        String reason = (String) body.getOrDefault("reason", "Administrative adjustment by HR");
 
-        return ResponseEntity.ok(leaveService.adjustEmployeeBalance(employeeId, leaveType, adjustmentDays));
+        return ResponseEntity.ok(leaveService.adjustEmployeeBalance(employeeId, leaveType, adjustmentDays, reason));
     }
 
     @PutMapping("/{id}/withdraw")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR')")
     public ResponseEntity<LeaveRequest> withdrawApprovedLeave(
             @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> body) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        String actorEmail = (auth != null) ? auth.getName() : null;
+        if (actorEmail != null && !actorEmail.isBlank()) {
+            return ResponseEntity.ok(leaveService.withdrawApprovedLeave(id, actorEmail));
+        }
         Long actorId = null;
         if (body != null && body.containsKey("actorId")) {
             try {

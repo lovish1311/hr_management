@@ -17,6 +17,7 @@ public class LeaveEventListener {
     private final AttendanceService attendanceService;
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void handleLeaveApproved(LeaveApprovedEvent event) {
         log.info("Handling LeaveApprovedEvent for employeeId={}: {} to {}",
                 event.getEmployeeId(), event.getStartDate(), event.getEndDate());
@@ -33,6 +34,7 @@ public class LeaveEventListener {
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void handleLeaveWithdrawn(LeaveWithdrawnEvent event) {
         log.info("Handling LeaveWithdrawnEvent for employeeId={}: {} to {}",
                 event.getEmployeeId(), event.getStartDate(), event.getEndDate());

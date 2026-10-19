@@ -125,5 +125,10 @@ public class LeaveAccrualService {
             balance.setAccrualMonthsWorked(12);
             balance.setAccrualNotes("Full annual quota assigned.");
         }
+
+        if (employee != null && "PROBATION".equalsIgnoreCase(employee.getStatus())) {
+            balance.setEarnedLeaveQuota(0.0);
+            log.info("Employee ID={} is in PROBATION: Earned Leave quota set to 0.0.", employee.getId());
+        }
     }
 }

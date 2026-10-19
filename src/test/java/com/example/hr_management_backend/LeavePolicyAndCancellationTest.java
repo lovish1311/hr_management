@@ -4,9 +4,15 @@ import com.example.hr_management_backend.features.employees.model.Employee;
 import com.example.hr_management_backend.features.employees.repository.EmployeeRepository;
 import com.example.hr_management_backend.features.leaves.model.LeaveBalance;
 import com.example.hr_management_backend.features.leaves.model.LeaveRequest;
+import com.example.hr_management_backend.features.leaves.model.EmployeeLeaveQuota;
+import com.example.hr_management_backend.features.leaves.repository.EmployeeLeaveQuotaRepository;
 import com.example.hr_management_backend.features.leaves.repository.LeaveBalanceRepository;
 import com.example.hr_management_backend.features.leaves.repository.LeaveRequestRepository;
 import com.example.hr_management_backend.features.leaves.service.LeaveService;
+import com.example.hr_management_backend.features.holidays.model.Holiday;
+import com.example.hr_management_backend.features.holidays.model.HolidayList;
+import com.example.hr_management_backend.features.holidays.repository.HolidayListRepository;
+import com.example.hr_management_backend.features.holidays.repository.HolidayRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,7 +37,16 @@ public class LeavePolicyAndCancellationTest {
     private LeaveBalanceRepository leaveBalanceRepository;
 
     @Autowired
+    private EmployeeLeaveQuotaRepository employeeLeaveQuotaRepository;
+
+    @Autowired
     private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private HolidayRepository holidayRepository;
+
+    @Autowired
+    private HolidayListRepository holidayListRepository;
 
     private Employee testEmployee;
     private Employee hrManager;
@@ -102,7 +117,7 @@ public class LeavePolicyAndCancellationTest {
     }
 
     @Test
-    @DisplayName("Scenario 2: Employee applies, Manager approves, then Employee cancels — used balance is refunded")
+    @DisplayName("Scenario 2: Employee applies, Manager approves, then Employee initiates cancel — enters CANCEL_REQUESTED (no refund) until Manager approves")
     void testCancelApprovedLeaveRequestRefundsBalance() {
         LeaveRequest request = LeaveRequest.builder()
                 .employeeId(testEmployee.getId())
@@ -124,12 +139,20 @@ public class LeavePolicyAndCancellationTest {
         assertEquals(2.0, balanceAfterApprove.getSickLeaveUsed());
         assertEquals(4.0, balanceAfterApprove.getSickLeaveRemaining());
 
-        // Cancel approved leave
-        LeaveRequest cancelled = leaveService.cancelLeaveRequest(saved.getId(), testEmployee.getId());
-        assertEquals("CANCELLED", cancelled.getStatus());
+        // 1. Employee self-initiates cancel on APPROVED leave -> enters CANCEL_REQUESTED
+        LeaveRequest cancelRequested = leaveService.cancelLeaveRequest(saved.getId(), testEmployee.getId());
+        assertEquals("CANCEL_REQUESTED", cancelRequested.getStatus(), "Employee cancel on APPROVED leave must require Manager review");
+
+        // Balance MUST NOT be refunded yet while awaiting manager approval
+        LeaveBalance balancePendingReview = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), LocalDate.now().getYear());
+        assertEquals(2.0, balancePendingReview.getSickLeaveUsed(), "Days must remain deducted while in CANCEL_REQUESTED");
+
+        // 2. Manager reviews and approves the cancellation request -> transitions to CANCELLED and refunds balance
+        LeaveRequest finalCancelled = leaveService.cancelLeaveRequest(saved.getId(), hrManager.getId());
+        assertEquals("CANCELLED", finalCancelled.getStatus());
 
         LeaveBalance balanceAfterCancel = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), LocalDate.now().getYear());
-        assertEquals(0.0, balanceAfterCancel.getSickLeaveUsed());
+        assertEquals(0.0, balanceAfterCancel.getSickLeaveUsed(), "Used days must be refunded once Manager approves cancellation");
         assertEquals(6.0, balanceAfterCancel.getSickLeaveRemaining());
     }
 
@@ -239,5 +262,96 @@ public class LeavePolicyAndCancellationTest {
         LeaveRequest s1Reapplied = leaveService.applyForLeave(s1Duplicate);
         assertNotNull(s1Reapplied.getId());
         assertEquals("PENDING", s1Reapplied.getStatus());
+    }
+
+    @Test
+    @DisplayName("Scenario 5: HR applies RESTRICTED_HOLIDAY and COMP_OFF on behalf of employee — deducts correct quotas, not Casual Leave")
+    void testApplyOnBehalfByHrRestrictedHolidayAndCompOff() {
+        int year = LocalDate.now().getYear();
+        LocalDate testDate = LocalDate.now().plusDays(20);
+
+        // Seed active published restricted holiday on testDate for policy validation
+        HolidayList hl = holidayListRepository.findAll().stream().findFirst().orElseGet(() ->
+                holidayListRepository.save(HolidayList.builder().name("Test List").year(year).active(true).published(true).build()));
+        hl.setPublished(true);
+        hl.setActive(true);
+        holidayListRepository.save(hl);
+
+        holidayRepository.save(Holiday.builder()
+                .holidayListId(hl.getId())
+                .name("Festival Celebration")
+                .date(testDate)
+                .type("RESTRICTED")
+                .active(true)
+                .build());
+
+        // Reset balances
+        LeaveBalance balance = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), year);
+        balance.setCasualLeaveQuota(6.0);
+        balance.setCasualLeaveUsed(0.0);
+        balance.setRestrictedHolidayQuota(2.0);
+        balance.setRestrictedHolidayUsed(0.0);
+        leaveBalanceRepository.save(balance);
+
+        // 1. HR logs a RESTRICTED_HOLIDAY on behalf of the employee
+        LeaveRequest rhRequest = LeaveRequest.builder()
+                .employeeId(testEmployee.getId())
+                .leaveType("RESTRICTED_HOLIDAY")
+                .startDate(testDate)
+                .endDate(testDate)
+                .reason("Festival celebration")
+                .build();
+
+        LeaveRequest rhSaved = leaveService.applyOnBehalfByHr(rhRequest);
+        assertNotNull(rhSaved.getId());
+        assertEquals("APPROVED", rhSaved.getStatus());
+        assertEquals(1.0, rhSaved.getTotalDays());
+
+        // Verify: Restricted Holiday quota deducted by 1.0; Casual Leave remains completely untouched (0.0 used)
+        LeaveBalance balanceAfterRh = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), year);
+        assertEquals(1.0, balanceAfterRh.getRestrictedHolidayUsed(), "Restricted holiday used must be incremented by 1.0");
+        assertEquals(1.0, balanceAfterRh.getRestrictedHolidayRemaining(), "Restricted holiday remaining must be 1.0");
+        assertEquals(0.0, balanceAfterRh.getCasualLeaveUsed(), "Casual leave used must strictly remain 0.0");
+        assertEquals(6.0, balanceAfterRh.getCasualLeaveRemaining(), "Casual leave remaining must strictly remain 6.0");
+
+        // 2. Set up dynamic EmployeeLeaveQuota for COMP_OFF (e.g. 2.0 days earned from weekend work)
+        EmployeeLeaveQuota compOffQuota = employeeLeaveQuotaRepository
+                .findByEmployeeIdAndYearAndLeaveType(testEmployee.getId(), year, "COMP_OFF")
+                .orElseGet(() -> EmployeeLeaveQuota.builder()
+                        .employeeId(testEmployee.getId())
+                        .year(year)
+                        .leaveType("COMP_OFF")
+                        .quota(2.0)
+                        .used(0.0)
+                        .build());
+        compOffQuota.setQuota(2.0);
+        compOffQuota.setUsed(0.0);
+        employeeLeaveQuotaRepository.save(compOffQuota);
+
+        // 3. HR logs a COMP_OFF on behalf of the employee
+        LocalDate compOffDate = LocalDate.now().plusDays(25);
+        LeaveRequest compOffRequest = LeaveRequest.builder()
+                .employeeId(testEmployee.getId())
+                .leaveType("COMP_OFF")
+                .startDate(compOffDate)
+                .endDate(compOffDate)
+                .reason("Compensatory off for Saturday deployment")
+                .build();
+
+        LeaveRequest compOffSaved = leaveService.applyOnBehalfByHr(compOffRequest);
+        assertNotNull(compOffSaved.getId());
+        assertEquals("APPROVED", compOffSaved.getStatus());
+        assertEquals(1.0, compOffSaved.getTotalDays());
+
+        // Verify: Dynamic EmployeeLeaveQuota used is 1.0, and Casual Leave is STILL untouched
+        EmployeeLeaveQuota quotaAfter = employeeLeaveQuotaRepository
+                .findByEmployeeIdAndYearAndLeaveType(testEmployee.getId(), year, "COMP_OFF")
+                .orElseThrow();
+        assertEquals(1.0, quotaAfter.getUsed(), "Comp-off dynamic quota used must be incremented to 1.0");
+        assertEquals(1.0, quotaAfter.getRemaining(), "Comp-off dynamic quota remaining must be 1.0");
+
+        LeaveBalance balanceAfterCompOff = leaveService.getOrCreateLeaveBalance(testEmployee.getId(), year);
+        assertEquals(0.0, balanceAfterCompOff.getCasualLeaveUsed(), "Casual leave used must still remain 0.0");
+        assertEquals(6.0, balanceAfterCompOff.getCasualLeaveRemaining(), "Casual leave remaining must still remain 6.0");
     }
 }
