@@ -40,6 +40,101 @@ public class AttendanceService {
     private final com.example.hr_management_backend.features.holidays.repository.HolidayRepository holidayRepository;
 
     @Transactional
+    public Attendance checkIn(Long employeeId, LocalTime checkInTime) {
+        LocalDate today = LocalDate.now();
+        LocalTime effectiveInTime = checkInTime != null ? checkInTime : LocalTime.now();
+
+        // Check if employee has an approved full-day non-WFH leave today
+        List<LeaveRequest> approvedLeaves = leaveRequestRepository.findApprovedLeavesForEmployeeInRange(employeeId, today, today);
+        boolean onFullDayLeave = approvedLeaves.stream().anyMatch(l -> 
+                !isShortBreak(l.getLeaveType()) && !isEarlyOut(l.getLeaveType()) && !isLateArrival(l.getLeaveType()) && !isWfh(l.getLeaveType()));
+        if (onFullDayLeave) {
+            throw new IllegalStateException("Cannot check in: Employee is on approved leave today.");
+        }
+
+        Employee emp = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new IllegalArgumentException("Employee not found with ID: " + employeeId));
+
+        Attendance attendance = attendanceRepository.findByEmployeeIdAndDate(employeeId, today)
+                .orElseGet(() -> new Attendance(null, employeeId, today, effectiveInTime, null, "PRESENT"));
+
+        // If employee has already checked in previously today, PRESERVE original check-in time!
+        if (attendance.getCheckInTime() == null) {
+            attendance.setCheckInTime(effectiveInTime);
+        }
+
+        // Determine late arrival status
+        LocalTime lateCutoff = emp.getLateArrivalAllowedUntil() != null 
+                ? emp.getLateArrivalAllowedUntil() 
+                : getUniversalLateCutoff();
+
+        LeaveRequest lateWaiver = approvedLeaves.stream().filter(l -> isLateArrival(l.getLeaveType())).findFirst().orElse(null);
+        LeaveRequest shortBreak = approvedLeaves.stream().filter(l -> isShortBreak(l.getLeaveType())).findFirst().orElse(null);
+
+        String status = "PRESENT";
+        if (attendance.getCheckInTime().isAfter(lateCutoff)) {
+            if (lateWaiver != null) {
+                LocalTime approvedUntil = lateWaiver.getEndTime() != null ? lateWaiver.getEndTime() : LocalTime.of(12, 0);
+                status = attendance.getCheckInTime().isAfter(approvedUntil) ? "LATE" : "PRESENT";
+            } else if (shortBreak != null && shortBreak.getStartTime() != null && shortBreak.getStartTime().isBefore(getUniversalLateCutoff())) {
+                LocalTime approvedUntil = shortBreak.getEndTime() != null ? shortBreak.getEndTime() : LocalTime.of(12, 0);
+                status = attendance.getCheckInTime().isAfter(approvedUntil) ? "LATE" : "PRESENT";
+            } else {
+                status = "LATE";
+            }
+        }
+
+        if (attendance.getCheckOutTime() != null) {
+            attendance.setTotalWorkingMinutes((int) java.time.Duration.between(attendance.getCheckInTime(), attendance.getCheckOutTime()).toMinutes());
+        }
+        attendance.setStatus(status);
+
+        return attendanceRepository.save(attendance);
+    }
+
+    @Transactional
+    public Attendance checkOut(Long employeeId, LocalTime checkOutTime) {
+        LocalDate today = LocalDate.now();
+        LocalTime effectiveOutTime = checkOutTime != null ? checkOutTime : LocalTime.now();
+
+        Attendance attendance = attendanceRepository.findByEmployeeIdAndDate(employeeId, today)
+                .orElseThrow(() -> new IllegalStateException("Cannot check out: No check-in record found for today. Please check in first."));
+
+        if (attendance.getCheckInTime() == null) {
+            throw new IllegalStateException("Cannot check out: Check-in time is missing.");
+        }
+
+        attendance.setCheckOutTime(effectiveOutTime);
+        int totalMinutes = (int) java.time.Duration.between(attendance.getCheckInTime(), effectiveOutTime).toMinutes();
+        if (totalMinutes < 0) totalMinutes = 0;
+        attendance.setTotalWorkingMinutes(totalMinutes);
+
+        Employee emp = employeeRepository.findById(employeeId).orElse(null);
+        LocalTime earlyCutoff = (emp != null && emp.getEarlyOutAllowedAfter() != null)
+                ? emp.getEarlyOutAllowedAfter()
+                : getUniversalEarlyCutoff();
+
+        List<LeaveRequest> approvedLeaves = leaveRequestRepository.findApprovedLeavesForEmployeeInRange(employeeId, today, today);
+        LeaveRequest earlyOutWaiver = approvedLeaves.stream().filter(l -> isEarlyOut(l.getLeaveType())).findFirst().orElse(null);
+
+        // Duration threshold: < 240 mins (4 hours) -> HALF_DAY
+        if (totalMinutes < 240) {
+            attendance.setStatus("HALF_DAY");
+        } else if (!"LATE".equals(attendance.getStatus()) && effectiveOutTime.isBefore(earlyCutoff)) {
+            if (earlyOutWaiver != null) {
+                LocalTime approvedEarly = earlyOutWaiver.getStartTime() != null ? earlyOutWaiver.getStartTime() : LocalTime.of(17, 0);
+                if (effectiveOutTime.isBefore(approvedEarly)) {
+                    attendance.setStatus("LATE");
+                }
+            } else {
+                attendance.setStatus("LATE");
+            }
+        }
+
+        return attendanceRepository.save(attendance);
+    }
+
+    @Transactional
     public Attendance markAttendance(Long employeeId, String status) {
         LocalDate today = LocalDate.now();
 
@@ -51,11 +146,13 @@ public class AttendanceService {
         Attendance attendance = attendanceRepository.findByEmployeeIdAndDate(employeeId, today)
                 .orElseGet(() -> new Attendance(null, employeeId, today, LocalTime.now(), null, status));
 
-        if (attendance.getCheckInTime() != null && attendance.getCheckOutTime() != null) {
+        if (attendance.getCheckInTime() == null) {
+            attendance.setCheckInTime(LocalTime.now());
+        }
+        if (attendance.getCheckOutTime() != null) {
             attendance.setTotalWorkingMinutes((int) java.time.Duration.between(attendance.getCheckInTime(), attendance.getCheckOutTime()).toMinutes());
         }
 
-        attendance.setCheckInTime(LocalTime.now());
         attendance.setStatus(status);
 
         return attendanceRepository.save(attendance);
@@ -432,8 +529,7 @@ public class AttendanceService {
                     .checkOutTime(checkOut)
                     .isWeekend(isWeekend)
                     .isHoliday(isHoliday)
-                    .leaveRequestId(activeLeave != null ? activeLeave.getId() : null)
-                    .totalWorkingMinutes(attendance != null ? attendance.getTotalWorkingMinutes() : 0)
+                    .totalWorkingMinutes((attendance != null && attendance.getTotalWorkingMinutes() != null) ? attendance.getTotalWorkingMinutes() : 0)
                     .build());
         }
 
@@ -494,13 +590,19 @@ public class AttendanceService {
             firstNameMap.put(emp.getFirstName().replaceAll("\\s+", " ").trim().toLowerCase(), emp);
         }
 
-        List<BiometricImportRowDto> parsedRows = new ArrayList<>();
-        List<Attendance> attendanceToSave = new ArrayList<>();
+        // Internal helper to collect all punches across multiple rows/cells per employee
+        class EmployeePunchCollector {
+            final String rawName;
+            final Employee matched;
+            final List<LocalTime> punches = new ArrayList<>();
 
-        int presentCount = 0;
-        int lateCount = 0;
-        int absentCount = 0;
-        int unmatchedCount = 0;
+            EmployeePunchCollector(String rawName, Employee matched) {
+                this.rawName = rawName;
+                this.matched = matched;
+            }
+        }
+
+        Map<String, EmployeePunchCollector> aggregatedCollectors = new LinkedHashMap<>();
 
         try (Workbook workbook = getBeautifiedWorkbook(file)) {
             Sheet sheet = workbook.getSheetAt(0);
@@ -522,12 +624,6 @@ public class AttendanceService {
                 }
             }
 
-            // Pre-fetch all approved leaves for target date in a single batch query (P3 perf optimization)
-            Map<Long, List<LeaveRequest>> approvedLeavesMap = leaveRequestRepository
-                    .findAllApprovedForDate(activeDate)
-                    .stream()
-                    .collect(Collectors.groupingBy(LeaveRequest::getEmployeeId));
-
             for (int r = startRowIndex; r <= sheet.getLastRowNum(); r++) {
                 Row row = sheet.getRow(r);
                 if (row == null) continue;
@@ -541,13 +637,13 @@ public class AttendanceService {
                     continue;
                 }
 
-                List<LocalTime> times = new ArrayList<>();
+                List<LocalTime> rowTimes = new ArrayList<>();
                 for (int c = nameColIndex + 1; c < row.getLastCellNum(); c++) {
                     Cell cell = row.getCell(c);
                     if (cell != null) {
                         LocalTime parsed = parseTimeCell(cell);
                         if (parsed != null) {
-                            times.add(parsed);
+                            rowTimes.add(parsed);
                         }
                     }
                 }
@@ -560,6 +656,35 @@ public class AttendanceService {
                     String firstToken = key.split(" ")[0];
                     matched = firstNameMap.get(firstToken);
                 }
+
+                String groupKey = matched != null ? "EMP_" + matched.getId() : "NAME_" + key;
+                EmployeePunchCollector collector = aggregatedCollectors.get(groupKey);
+                if (collector == null) {
+                    collector = new EmployeePunchCollector(rawName, matched);
+                    aggregatedCollectors.put(groupKey, collector);
+                }
+                collector.punches.addAll(rowTimes);
+            }
+
+            // Pre-fetch all approved leaves for target date in a single batch query (P3 perf optimization)
+            Map<Long, List<LeaveRequest>> approvedLeavesMap = leaveRequestRepository
+                    .findAllApprovedForDate(activeDate)
+                    .stream()
+                    .collect(Collectors.groupingBy(LeaveRequest::getEmployeeId));
+
+            List<BiometricImportRowDto> parsedRows = new ArrayList<>();
+            Map<Long, Attendance> attendanceMapToSave = new LinkedHashMap<>();
+
+            int presentCount = 0;
+            int lateCount = 0;
+            int absentCount = 0;
+            int unmatchedCount = 0;
+
+            for (EmployeePunchCollector collector : aggregatedCollectors.values()) {
+                String rawName = collector.rawName;
+                Employee matched = collector.matched;
+                List<LocalTime> times = collector.punches;
+                Collections.sort(times);
 
                 LocalTime firstIn = !times.isEmpty() ? times.get(0) : null;
                 LocalTime lastOut = times.size() > 1 ? times.get(times.size() - 1) : null;
@@ -662,20 +787,30 @@ public class AttendanceService {
                         LocalTime effectiveEarlyCutoff = (matched != null && matched.getEarlyOutAllowedAfter() != null)
                                 ? matched.getEarlyOutAllowedAfter()
                                 : getUniversalEarlyCutoff();
-                        
+
                         if (lastOut != null && lastOut.isBefore(effectiveEarlyCutoff)) {
                             lateCount++;
                             status = "LATE";
                             statusLabel = "Left Early (" + formatTime(lastOut) + ")";
                         } else {
-                            presentCount++;
-                            status = "PRESENT";
-                            if (matched != null && matched.getLateArrivalAllowedUntil() != null && firstIn.isAfter(lateCutoff)) {
-                                statusLabel = "Present (Late Exemption Granted)";
-                            } else if (matched != null && matched.getEarlyOutAllowedAfter() != null && lastOut != null && lastOut.isBefore(getUniversalEarlyCutoff())) {
-                                statusLabel = "Present (Early Out Exemption Granted)";
+                            int totalMinutes = (firstIn != null && lastOut != null)
+                                    ? (int) java.time.Duration.between(firstIn, lastOut).toMinutes()
+                                    : 0;
+
+                            if (firstIn != null && lastOut != null && totalMinutes < 240) {
+                                status = "HALF_DAY";
+                                statusLabel = "Half Day (< 4 hrs worked: " + (totalMinutes / 60) + "h " + (totalMinutes % 60) + "m)";
+                                lateCount++;
                             } else {
-                                statusLabel = "Present (" + formatTime(firstIn) + ")";
+                                presentCount++;
+                                status = "PRESENT";
+                                if (matched != null && matched.getLateArrivalAllowedUntil() != null && firstIn.isAfter(lateCutoff)) {
+                                    statusLabel = "Present (Late Exemption Granted)";
+                                } else if (matched != null && matched.getEarlyOutAllowedAfter() != null && lastOut != null && lastOut.isBefore(getUniversalEarlyCutoff())) {
+                                    statusLabel = "Present (Early Out Exemption Granted)";
+                                } else {
+                                    statusLabel = "Present (" + formatTime(firstIn) + ")";
+                                }
                             }
                         }
                     }
@@ -687,8 +822,8 @@ public class AttendanceService {
                     if (onLeave) {
                         status = "PAID_LEAVE";
                         statusLabel = "On Approved Leave (Punches Logged)";
-                    } 
-                    
+                    }
+
                     final Long empId = matched.getId();
                     final LocalTime inTime = firstIn;
                     final LocalTime outTime = lastOut;
@@ -696,13 +831,14 @@ public class AttendanceService {
 
                     Attendance att = attendanceRepository.findByEmployeeIdAndDate(empId, activeDate)
                             .orElseGet(() -> new Attendance(null, empId, activeDate, inTime, outTime, attStatus));
+
                     att.setCheckInTime(firstIn);
                     att.setCheckOutTime(lastOut);
-                    if (att.getCheckInTime() != null && att.getCheckOutTime() != null) {
-                        att.setTotalWorkingMinutes((int) java.time.Duration.between(att.getCheckInTime(), att.getCheckOutTime()).toMinutes());
+                    if (firstIn != null && lastOut != null) {
+                        att.setTotalWorkingMinutes((int) java.time.Duration.between(firstIn, lastOut).toMinutes());
                     }
                     att.setStatus(status);
-                    attendanceToSave.add(att);
+                    attendanceMapToSave.put(empId, att);
                 }
 
                 parsedRows.add(BiometricImportRowDto.builder()
@@ -717,25 +853,25 @@ public class AttendanceService {
                         .build());
             }
 
-            if (!attendanceToSave.isEmpty()) {
-                attendanceRepository.saveAll(attendanceToSave);
-                log.info("Batch imported biometric attendance: saved {} records for date={}", attendanceToSave.size(), activeDate);
+            if (!attendanceMapToSave.isEmpty()) {
+                attendanceRepository.saveAll(attendanceMapToSave.values());
+                log.info("Batch imported biometric attendance: saved {} records for date={}", attendanceMapToSave.size(), activeDate);
             }
+
+            return BiometricImportSummaryDto.builder()
+                    .targetDate(activeDate)
+                    .totalProcessed(parsedRows.size())
+                    .presentCount(presentCount)
+                    .lateCount(lateCount)
+                    .absentCount(absentCount)
+                    .unmatchedCount(unmatchedCount)
+                    .rows(parsedRows)
+                    .build();
 
         } catch (Exception e) {
             log.error("Failed to parse biometric excel file: {}", e.getMessage(), e);
             throw new RuntimeException("Error processing biometric Excel file: " + e.getMessage());
         }
-
-        return BiometricImportSummaryDto.builder()
-                .targetDate(activeDate)
-                .totalProcessed(parsedRows.size())
-                .presentCount(presentCount)
-                .lateCount(lateCount)
-                .absentCount(absentCount)
-                .unmatchedCount(unmatchedCount)
-                .rows(parsedRows)
-                .build();
     }
 
     private String getCellValueAsString(Cell cell) {
@@ -825,43 +961,6 @@ public class AttendanceService {
     }
 
     private Workbook getBeautifiedWorkbook(MultipartFile file) throws IOException {
-        String scriptPath = "C:\\Users\\Lovish\\Projects\\attendance_beautifier.py";
-        java.io.File scriptFile = new java.io.File(scriptPath);
-
-        if (scriptFile.exists()) {
-            java.io.File tempDir = new java.io.File(System.getProperty("java.io.tmpdir"));
-            String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "raw.xlsx";
-            String ext = originalFilename.contains(".") ? originalFilename.substring(originalFilename.lastIndexOf(".")) : ".xlsx";
-            
-            java.io.File rawFile = java.io.File.createTempFile("biometric_raw_", ext, tempDir);
-            java.io.File beautifiedFile = java.io.File.createTempFile("biometric_beautified_", ".xlsx", tempDir);
-            
-            try {
-                file.transferTo(rawFile);
-
-                String pythonExecutable = "C:\\Users\\Lovish\\AppData\\Local\\Programs\\Python\\Python312\\python.exe";
-                if (!new java.io.File(pythonExecutable).exists()) {
-                    pythonExecutable = "python";
-                }
-
-                ProcessBuilder pb = new ProcessBuilder(pythonExecutable, scriptPath, rawFile.getAbsolutePath(), beautifiedFile.getAbsolutePath());
-                pb.redirectErrorStream(true);
-                Process process = pb.start();
-                boolean finished = process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
-
-                if (finished && process.exitValue() == 0 && beautifiedFile.exists() && beautifiedFile.length() > 0) {
-                    log.info("Auto-beautified biometric Excel file successfully via python attendance_beautifier.py!");
-                    return WorkbookFactory.create(beautifiedFile);
-                } else {
-                    log.warn("Python beautifier script did not finish or exited with error. Using original file stream.");
-                }
-            } catch (Exception e) {
-                log.warn("Failed to execute python attendance_beautifier.py: {}. Falling back to original stream.", e.getMessage());
-            } finally {
-                rawFile.deleteOnExit();
-                beautifiedFile.deleteOnExit();
-            }
-        }
         return WorkbookFactory.create(file.getInputStream());
     }
 }

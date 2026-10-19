@@ -58,6 +58,8 @@ public class Employee {
     private LocalDate relievingDate;
 
     private String phoneNumber;
+    private String bankAccountNumber;
+    private String ifscCode;
 
     private LocalDate dateOfBirth;
 

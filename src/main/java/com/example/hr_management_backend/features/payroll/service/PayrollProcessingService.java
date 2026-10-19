@@ -281,8 +281,8 @@ public class PayrollProcessingService {
 
             if (!evalStart.isAfter(evalEnd)) {
                 for (LocalDate date = evalStart; !date.isAfter(evalEnd); date = date.plusDays(1)) {
-                    // 1. Skip Sundays and published public holidays
-                    if (date.getDayOfWeek() == DayOfWeek.SUNDAY || holidayDates.contains(date)) {
+                    // 1. Skip weekends (Saturday & Sunday) and published public holidays
+                    if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY || holidayDates.contains(date)) {
                         continue;
                     }
 
@@ -306,7 +306,7 @@ public class PayrollProcessingService {
                         String status = att.getStatus() != null ? att.getStatus().toUpperCase() : "";
                         if ("LOP_LEAVE".equals(status) || "UNEXCUSED_ABSENT".equals(status) || "ABSENT".equals(status)) {
                             totalLopDays += 1.0;
-                        } else if ("HALF_DAY".equals(status)) {
+                        } else if ("HALF_DAY".equals(status) || "HALF_DAY_LEAVE".equals(status)) {
                             totalLopDays += 0.5;
                         }
                     } else {
@@ -346,12 +346,27 @@ public class PayrollProcessingService {
         String month = normalizeMonth(monthStr);
         validatePayPeriodNotPublished(month, year);
 
-        List<MonthlyPayrollInput> inputs = monthlyPayrollInputRepository.findByPayrollMonthIgnoreCaseAndPayrollYear(month, year);
-        for (MonthlyPayrollInput i : inputs) {
-            i.setIsLocked(lock);
-            monthlyPayrollInputRepository.save(i);
+        List<Employee> allEmployees = employeeRepository.findAll();
+        List<MonthlyPayrollInput> toSave = new ArrayList<>();
+
+        for (Employee emp : allEmployees) {
+            MonthlyPayrollInput input = monthlyPayrollInputRepository
+                    .findByEmployeeIdAndPayrollMonthIgnoreCaseAndPayrollYear(emp.getId(), month, year)
+                    .orElseGet(() -> MonthlyPayrollInput.builder()
+                            .employeeId(emp.getId())
+                            .payrollMonth(month)
+                            .payrollYear(year)
+                            .lopDays(0.0)
+                            .overtimeHours(0.0)
+                            .adHocBonus(BigDecimal.ZERO)
+                            .adHocDeduction(BigDecimal.ZERO)
+                            .isExempt(Boolean.TRUE.equals(emp.getIsPayrollExempt()))
+                            .build());
+            input.setIsLocked(lock);
+            toSave.add(input);
         }
-        log.info("Payroll inputs for {} {} lock status updated to: {}", month, year, lock);
+        monthlyPayrollInputRepository.saveAll(toSave);
+        log.info("Payroll inputs for {} {} lock status updated to: {} across {} employees.", month, year, lock, toSave.size());
     }
 
     // =========================================================================
@@ -475,14 +490,47 @@ public class PayrollProcessingService {
             throw new IllegalStateException("No payroll records exist for " + month + " " + year + " to publish.");
         }
 
+        boolean hasUnverifiedDrafts = records.stream()
+                .anyMatch(r -> r.getStatus() == PayrollStatus.DRAFT);
+        if (hasUnverifiedDrafts) {
+            throw new IllegalStateException("Cannot publish payroll containing unverified DRAFT records. Please run verifyBatchPayroll first.");
+        }
+
         LocalDateTime now = LocalDateTime.now();
         for (PayrollRecord r : records) {
-            r.setStatus(PayrollStatus.PUBLISHED);
-            r.setPublishedAt(now);
-            payrollRecordRepository.save(r);
-            arrearsService.markArrearsAsProcessed(r.getEmployeeId(), month, year, r.getId());
+            if (r.getStatus() == PayrollStatus.VERIFIED) {
+                r.setStatus(PayrollStatus.PUBLISHED);
+                r.setPublishedAt(now);
+                payrollRecordRepository.save(r);
+                arrearsService.markArrearsAsProcessed(r.getEmployeeId(), month, year, r.getId());
+            } else if (r.getStatus() == PayrollStatus.EXEMPT) {
+                r.setPublishedAt(now);
+                payrollRecordRepository.save(r);
+            }
         }
-        log.info("Batch payroll for {} {} PUBLISHED to all employees.", month, year);
+
+        // Auto-lock all monthly inputs for this period to prevent future modifications
+        List<Employee> allEmployees = employeeRepository.findAll();
+        List<MonthlyPayrollInput> inputsToLock = new ArrayList<>();
+        for (Employee emp : allEmployees) {
+            MonthlyPayrollInput input = monthlyPayrollInputRepository
+                    .findByEmployeeIdAndPayrollMonthIgnoreCaseAndPayrollYear(emp.getId(), month, year)
+                    .orElseGet(() -> MonthlyPayrollInput.builder()
+                            .employeeId(emp.getId())
+                            .payrollMonth(month)
+                            .payrollYear(year)
+                            .lopDays(0.0)
+                            .overtimeHours(0.0)
+                            .adHocBonus(BigDecimal.ZERO)
+                            .adHocDeduction(BigDecimal.ZERO)
+                            .isExempt(Boolean.TRUE.equals(emp.getIsPayrollExempt()))
+                            .build());
+            input.setIsLocked(true);
+            inputsToLock.add(input);
+        }
+        monthlyPayrollInputRepository.saveAll(inputsToLock);
+
+        log.info("Batch payroll for {} {} PUBLISHED. Verified records transitioned to PUBLISHED, EXEMPT preserved, inputs locked.", month, year);
     }
 
     @Transactional(readOnly = true)
@@ -493,13 +541,6 @@ public class PayrollProcessingService {
                     employeeId, PayrollStatus.PUBLISHED);
         } else {
             records = payrollRecordRepository.findByEmployeeIdOrderByPayrollYearDescProcessedAtDesc(employeeId);
-        }
-
-        // If no records exist yet, seed a historical published record so the screen immediately renders
-        if (records.isEmpty() && onlyPublished) {
-            seedInitialPublishedPayslip(employeeId);
-            records = payrollRecordRepository.findByEmployeeIdAndStatusOrderByPayrollYearDescProcessedAtDesc(
-                    employeeId, PayrollStatus.PUBLISHED);
         }
 
         return records.stream().map(this::mapToPayrollRecordDto).collect(Collectors.toList());
@@ -615,14 +656,22 @@ public class PayrollProcessingService {
 
         BigDecimal totalFixedGross = struct.getTotalFixedGross();
 
-        // 1. Per-Day Gross = Total Fixed Gross / Days in Month (scale 4)
-        BigDecimal perDayGross = totalFixedGross.divide(BigDecimal.valueOf(daysInMonth), 4, RoundingMode.HALF_UP);
+        // 1. Per-Day Gross = Total Fixed Gross / Days in Month (scale 6 for division precision)
+        BigDecimal perDayGross = totalFixedGross.divide(BigDecimal.valueOf(daysInMonth), 6, RoundingMode.HALF_UP);
 
-        // 2. LOP Amount = Per-Day Gross * lopDays (scale 2)
+        // 2. Pre-joining and LOP Deductions (scale 2)
+        BigDecimal preJoiningDeduction = perDayGross.multiply(BigDecimal.valueOf(preJoiningDays)).setScale(2, RoundingMode.HALF_UP);
         BigDecimal lopAmount = perDayGross.multiply(BigDecimal.valueOf(lopDays)).setScale(2, RoundingMode.HALF_UP);
 
-        // 3. Earned Fixed Gross = Per-Day Gross * paidDays
-        BigDecimal earnedFixedGross = perDayGross.multiply(BigDecimal.valueOf(paidDays)).min(totalFixedGross).setScale(2, RoundingMode.HALF_UP);
+        // 3. Earned Fixed Gross = Exact difference to guarantee zero paisa rounding drift
+        BigDecimal earnedFixedGross;
+        if (preJoiningDays == 0 && lopDays == 0.0) {
+            earnedFixedGross = totalFixedGross;
+        } else if (paidDays <= 0.0) {
+            earnedFixedGross = BigDecimal.ZERO;
+        } else {
+            earnedFixedGross = totalFixedGross.subtract(preJoiningDeduction).subtract(lopAmount).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        }
 
         // Pro-rata ratio for component breakdown with full precision
         BigDecimal proRataFactor = daysInMonth > 0 && paidDays > 0
@@ -638,18 +687,26 @@ public class PayrollProcessingService {
         BigDecimal calcBasic = earnedFixedGross.subtract(otherComponentsSum).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
 
         // 4. Overtime calculation: (Per-Day Gross / 8 hrs) * 1.5 OT multiplier
-        BigDecimal hourlyRate = perDayGross.divide(BigDecimal.valueOf(8), 4, RoundingMode.HALF_UP);
+        BigDecimal hourlyRate = perDayGross.divide(BigDecimal.valueOf(8), 6, RoundingMode.HALF_UP);
         BigDecimal otRate = hourlyRate.multiply(BigDecimal.valueOf(1.5));
         BigDecimal otAmount = otRate.multiply(BigDecimal.valueOf(otHours)).setScale(2, RoundingMode.HALF_UP);
 
         // 5. Arrears & Total Gross Pay = Earned Fixed Gross + Overtime + Ad-Hoc Bonus + Arrears
         BigDecimal arrears = input.getArrearsAmount() != null ? input.getArrearsAmount() : BigDecimal.ZERO;
+        if (arrears.compareTo(BigDecimal.ZERO) == 0 && arrearsService != null) {
+            arrears = arrearsService.calculatePendingArrearsTotalForEmployee(emp.getId(), month, year);
+        }
         BigDecimal totalGross = earnedFixedGross.add(otAmount).add(adHocBonus).add(arrears).setScale(2, RoundingMode.HALF_UP);
 
-        // 6. Statutory Deductions
-        BigDecimal calcPf = struct.getPfContribution().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal calcEsi = struct.getEsiContribution().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal calcPt = struct.getProfessionalTax().setScale(2, RoundingMode.HALF_UP);
+        // 6. Statutory Deductions: Zeroed if paidDays == 0 and totalGross == 0 to avoid false liabilities
+        BigDecimal calcPf = BigDecimal.ZERO;
+        BigDecimal calcEsi = BigDecimal.ZERO;
+        BigDecimal calcPt = BigDecimal.ZERO;
+        if (paidDays > 0.0 || totalGross.compareTo(BigDecimal.ZERO) > 0) {
+            calcPf = struct.getPfContribution() != null ? struct.getPfContribution().setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+            calcEsi = struct.getEsiContribution() != null ? struct.getEsiContribution().setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+            calcPt = struct.getProfessionalTax() != null ? struct.getProfessionalTax().setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+        }
 
         // 7. Income Tax (TDS) Calculation via Strategy Pattern
         TaxRegime regime = TaxRegime.NEW;
@@ -666,7 +723,18 @@ public class PayrollProcessingService {
                 .monthlyTdsOverride(struct.getMonthlyTdsOverride())
                 .build();
 
-        BigDecimal calcTds = taxCalculatorFactory.getStrategy(regime).calculateMonthlyTds(totalGross, declaration);
+        BigDecimal calcTds;
+        if (declaration.getMonthlyTdsOverride() != null && declaration.getMonthlyTdsOverride().compareTo(BigDecimal.ZERO) >= 0) {
+            calcTds = declaration.getMonthlyTdsOverride().setScale(2, RoundingMode.HALF_UP);
+        } else if (totalGross.compareTo(BigDecimal.ZERO) <= 0) {
+            calcTds = BigDecimal.ZERO;
+        } else {
+            // Project annual taxable income: regular monthly earned gross annualized + one-time sums (bonuses & arrears)
+            // This prevents distorting annual tax projection with a 12x multiplier on one-time payouts
+            BigDecimal annualProjectedTaxable = earnedFixedGross.multiply(BigDecimal.valueOf(12)).add(adHocBonus).add(arrears);
+            BigDecimal annualTax = taxCalculatorFactory.getStrategy(regime).calculateAnnualTax(annualProjectedTaxable, declaration);
+            calcTds = annualTax.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+        }
 
         // 8. Total Deductions = Statutory + Ad-Hoc Deduction + TDS
         BigDecimal totalDeductions = calcPf.add(calcEsi).add(calcPt).add(adHocDeduction).add(calcTds).setScale(2, RoundingMode.HALF_UP);
@@ -684,7 +752,12 @@ public class PayrollProcessingService {
         record.setEmployeeCode(emp.getEmployeeCode());
         record.setDesignation(emp.getDesignation());
         record.setDepartment(emp.getDepartment());
-        record.setBankAccountNumber("•••• •••• " + (1000 + (emp.getId().intValue() * 123) % 9000));
+
+        String bankAcc = emp.getBankAccountNumber();
+        if (bankAcc == null || bankAcc.isBlank()) {
+            bankAcc = "•••• •••• " + (1000 + (emp.getId().intValue() * 123) % 9000);
+        }
+        record.setBankAccountNumber(bankAcc);
 
         record.setPayrollMonth(month);
         record.setPayrollYear(year);
@@ -890,6 +963,13 @@ public class PayrollProcessingService {
         payrollRecordRepository.save(record);
     }
 
+    public boolean isRecordOwner(Long employeeId, String email) {
+        if (employeeId == null || email == null) return false;
+        return employeeRepository.findById(employeeId)
+                .map(emp -> email.equalsIgnoreCase(emp.getEmail()))
+                .orElse(false);
+    }
+
     private String normalizeMonth(String monthStr) {
         if (monthStr == null || monthStr.isBlank()) {
             return LocalDate.now().getMonth().name();
@@ -897,20 +977,35 @@ public class PayrollProcessingService {
         String clean = monthStr.trim().toUpperCase();
         try {
             int num = Integer.parseInt(clean);
+            if (num < 1 || num > 12) {
+                throw new IllegalArgumentException("Invalid month number: " + monthStr + ". Must be between 1 and 12.");
+            }
             return Month.of(num).name();
         } catch (NumberFormatException e) {
-            return clean;
+            try {
+                return Month.valueOf(clean).name();
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException("Invalid month name: " + monthStr + ". Expected valid month name (e.g., OCTOBER) or number (1-12).");
+            }
         }
     }
 
     private int parseMonthNumber(String monthStr) {
-        try {
-            return Integer.parseInt(monthStr);
-        } catch (Exception ignored) {}
-        try {
-            return Month.valueOf(monthStr.toUpperCase()).getValue();
-        } catch (Exception e) {
+        if (monthStr == null || monthStr.isBlank()) {
             return LocalDate.now().getMonthValue();
+        }
+        try {
+            int num = Integer.parseInt(monthStr.trim());
+            if (num >= 1 && num <= 12) {
+                return num;
+            }
+            throw new IllegalArgumentException("Invalid month number: " + monthStr + ". Must be between 1 and 12.");
+        } catch (NumberFormatException ignored) {}
+
+        try {
+            return Month.valueOf(monthStr.trim().toUpperCase()).getValue();
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid month name: " + monthStr + ". Expected valid month name (e.g., OCTOBER) or number (1-12).");
         }
     }
 

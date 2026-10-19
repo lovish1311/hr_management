@@ -9,14 +9,20 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 
 import jakarta.persistence.Index;
+import jakarta.persistence.UniqueConstraint;
 
 @Entity
-@Table(name = "attendance", indexes = {
-    @Index(name = "idx_attendance_emp_date", columnList = "employeeId, date"),
-    @Index(name = "idx_attendance_date_status", columnList = "date, status"),
-    @Index(name = "idx_attendance_emp", columnList = "employeeId"),
-    @Index(name = "idx_attendance_date", columnList = "date")
-})
+@Table(name = "attendance", 
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_attendance_emp_date", columnNames = {"employeeId", "date"})
+    },
+    indexes = {
+        @Index(name = "idx_attendance_emp_date", columnList = "employeeId, date"),
+        @Index(name = "idx_attendance_date_status", columnList = "date, status"),
+        @Index(name = "idx_attendance_emp", columnList = "employeeId"),
+        @Index(name = "idx_attendance_date", columnList = "date")
+    }
+)
 public class Attendance {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

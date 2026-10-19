@@ -1,27 +1,20 @@
 package com.example.hr_management_backend.features.payroll.controller;
 
-import com.example.hr_management_backend.features.payroll.dto.*;
-import com.example.hr_management_backend.features.payroll.model.Payroll;
-import com.example.hr_management_backend.features.payroll.service.PayrollProcessingService;
-import com.example.hr_management_backend.features.payroll.service.PayrollService;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
 import com.example.hr_management_backend.features.payroll.arrears.ArrearsDto;
 import com.example.hr_management_backend.features.payroll.arrears.ArrearsService;
 import com.example.hr_management_backend.features.payroll.banking.BankPayoutExportService;
+import com.example.hr_management_backend.features.payroll.dto.*;
+import com.example.hr_management_backend.features.payroll.model.Payroll;
 import com.example.hr_management_backend.features.payroll.reconciliation.PayrollReconciliationReportDto;
 import com.example.hr_management_backend.features.payroll.reconciliation.PayrollReconciliationService;
+import com.example.hr_management_backend.features.payroll.service.PayrollProcessingService;
+import com.example.hr_management_backend.features.payroll.service.PayrollService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -31,7 +24,6 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping({"/api/payroll", "/api/v1/payroll"})
-@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class PayrollController {
 
@@ -52,6 +44,7 @@ public class PayrollController {
     }
 
     @GetMapping("/structure/{employeeId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('SALARY_STRUCTURE_MANAGE') or hasAuthority('PAYROLL_MANAGE') or @payrollSecurity.isSelf(authentication, #employeeId)")
     public ResponseEntity<SalaryStructureDto> getSalaryStructure(@PathVariable Long employeeId) {
         return ResponseEntity.ok(processingService.getSalaryStructure(employeeId));
     }
@@ -151,15 +144,36 @@ public class PayrollController {
     }
 
     @GetMapping("/payslips")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE') or @payrollSecurity.isSelf(authentication, #employeeId)")
     public ResponseEntity<List<PayrollRecordDto>> getPayslips(
             @RequestParam Long employeeId,
-            @RequestParam(defaultValue = "true") boolean onlyPublished) {
-        return ResponseEntity.ok(processingService.getPayslipsForEmployee(employeeId, onlyPublished));
+            @RequestParam(defaultValue = "true") boolean onlyPublished,
+            Authentication authentication) {
+        boolean isPayrollAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN")
+                        || a.getAuthority().equals("ROLE_ADMIN")
+                        || a.getAuthority().equals("ROLE_HR")
+                        || a.getAuthority().equals("PAYROLL_MANAGE"));
+        // Force onlyPublished = true for non-admin self-service callers to prevent viewing draft salaries
+        boolean effectiveOnlyPublished = isPayrollAdmin ? onlyPublished : true;
+        return ResponseEntity.ok(processingService.getPayslipsForEmployee(employeeId, effectiveOnlyPublished));
     }
 
     @GetMapping({"/payslip/{recordId}", "/records/{recordId}"})
-    public ResponseEntity<PayrollRecordDto> getPayslipById(@PathVariable UUID recordId) {
-        return ResponseEntity.ok(processingService.getPayslipById(recordId));
+    public ResponseEntity<PayrollRecordDto> getPayslipById(@PathVariable UUID recordId, Authentication authentication) {
+        PayrollRecordDto dto = processingService.getPayslipById(recordId);
+        boolean isPayrollAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN")
+                        || a.getAuthority().equals("ROLE_ADMIN")
+                        || a.getAuthority().equals("ROLE_HR")
+                        || a.getAuthority().equals("PAYROLL_MANAGE"));
+        if (!isPayrollAdmin) {
+            String email = authentication != null ? authentication.getName() : null;
+            if (!processingService.isRecordOwner(dto.getEmployeeId(), email)) {
+                throw new org.springframework.security.access.AccessDeniedException("Not authorized to view this payslip.");
+            }
+        }
+        return ResponseEntity.ok(dto);
     }
 
     @GetMapping("/records")
@@ -232,16 +246,19 @@ public class PayrollController {
     // =========================================================================
 
     @PostMapping("/generate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<Payroll> generatePayrollLegacy(@RequestBody Payroll payroll) {
         return ResponseEntity.ok(legacyPayrollService.generatePayroll(payroll));
     }
 
     @GetMapping("/employee/{employeeId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE') or @payrollSecurity.isSelf(authentication, #employeeId)")
     public ResponseEntity<List<Payroll>> getPayrollHistoryLegacy(@PathVariable Long employeeId) {
         return ResponseEntity.ok(legacyPayrollService.getPayrollHistory(employeeId));
     }
 
     @GetMapping("/employee/{employeeId}/month/{payPeriod}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR') or hasAuthority('PAYROLL_MANAGE') or @payrollSecurity.isSelf(authentication, #employeeId)")
     public ResponseEntity<Payroll> getPayslipForMonthLegacy(
             @PathVariable Long employeeId,
             @PathVariable String payPeriod) {
@@ -251,6 +268,7 @@ public class PayrollController {
     }
 
     @PostMapping("/seed/{employeeId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN') or hasAuthority('PAYROLL_MANAGE')")
     public ResponseEntity<List<Payroll>> seedEmployeePayrollLegacy(@PathVariable Long employeeId) {
         return ResponseEntity.ok(legacyPayrollService.seedDefaultPayrollForEmployee(employeeId));
     }

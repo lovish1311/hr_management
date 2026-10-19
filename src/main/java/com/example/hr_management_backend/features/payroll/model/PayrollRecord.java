@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "payroll_records", indexes = {
+@Table(name = "payroll_records", uniqueConstraints = {
+    @UniqueConstraint(name = "uk_payroll_record_emp_period", columnNames = {"employeeId", "payrollMonth", "payrollYear"})
+}, indexes = {
     @Index(name = "idx_payroll_record_emp_period", columnList = "employeeId, payrollYear, payrollMonth"),
     @Index(name = "idx_payroll_record_status", columnList = "status"),
     @Index(name = "idx_payroll_record_period", columnList = "payrollYear, payrollMonth")

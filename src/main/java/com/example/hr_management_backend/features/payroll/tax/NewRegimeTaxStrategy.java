@@ -20,18 +20,18 @@ public class NewRegimeTaxStrategy implements TaxCalculationStrategy {
     @Override
     public BigDecimal calculateAnnualTax(BigDecimal annualGrossTaxable, TaxDeclarationDto declaration) {
         if (annualGrossTaxable == null || annualGrossTaxable.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
         // Net taxable income after Standard Deduction
         BigDecimal taxableIncome = annualGrossTaxable.subtract(STANDARD_DEDUCTION);
         if (taxableIncome.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
         // Section 87A Rebate: if taxable income <= 7,00,000 -> 0 tax
         if (taxableIncome.compareTo(REBATE_LIMIT) <= 0) {
-            return BigDecimal.ZERO;
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
         BigDecimal tax = BigDecimal.ZERO;
@@ -64,7 +64,13 @@ public class NewRegimeTaxStrategy implements TaxCalculationStrategy {
         // Slab 6: Above 15,00,000 @ 30%
         if (taxableIncome.compareTo(BigDecimal.valueOf(1500000)) > 0) {
             BigDecimal chunk = taxableIncome.subtract(BigDecimal.valueOf(1500000));
-            tax = tax.add(chunk.multiply(BigDecimal.valueOf(0.30)));
+            tax = tax.add(chunk.multiply(new BigDecimal("0.30")));
+        }
+
+        // Section 87A Marginal Relief: Tax payable cannot exceed income above ₹7,00,000
+        BigDecimal incomeAboveRebate = taxableIncome.subtract(REBATE_LIMIT);
+        if (tax.compareTo(incomeAboveRebate) > 0) {
+            tax = incomeAboveRebate;
         }
 
         // Add 4% Health & Education Cess
@@ -79,7 +85,7 @@ public class NewRegimeTaxStrategy implements TaxCalculationStrategy {
         }
 
         if (monthlyTaxableGross == null || monthlyTaxableGross.compareTo(BigDecimal.ZERO) <= 0) {
-            return BigDecimal.ZERO;
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
         BigDecimal annualized = monthlyTaxableGross.multiply(BigDecimal.valueOf(12));

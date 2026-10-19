@@ -333,5 +333,142 @@ public class PayrollProcessingServiceTest {
         // Net pay = 32000 - 2000 = 30,000.00
         assertEquals(BigDecimal.valueOf(30000.00).setScale(2), joinerRecord.getNetPay().setScale(2));
     }
+
+    @Test
+    @DisplayName("Test 8: Strict Month Format Rejection (Defect 11)")
+    void testInvalidMonthFormatRejection() {
+        assertThrows(IllegalArgumentException.class, () ->
+                payrollProcessingService.processBatchPayroll("OCTOBER_INVALID", 2026));
+
+        assertThrows(IllegalArgumentException.class, () ->
+                payrollProcessingService.setLockStateForMonth("13", 2026, true));
+
+        assertThrows(IllegalArgumentException.class, () ->
+                payrollProcessingService.setLockStateForMonth("0", 2026, true));
+    }
+
+    @Test
+    @DisplayName("Test 9: Zero Paisa Rounding Drift Exactness (Defect 9)")
+    void testZeroPaisaRoundingDriftExactness() {
+        // Salary with fractional division: ₹45,500 in 31-day October
+        Employee precisionEmp = employeeRepository.save(Employee.builder()
+                .firstName("Divya")
+                .lastName("Nair")
+                .email("divya.precision." + UUID.randomUUID() + "@company.com")
+                .employeeCode("EMP-DRIFT-01")
+                .role("EMPLOYEE")
+                .isAttendanceTracked(true)
+                .build());
+
+        BigDecimal fixedGross = BigDecimal.valueOf(45500.00);
+        payrollProcessingService.saveSalaryStructure(SalaryStructureDto.builder()
+                .employeeId(precisionEmp.getId())
+                .basicPay(BigDecimal.valueOf(22750.00))
+                .hra(BigDecimal.valueOf(11375.00))
+                .conveyanceAllowance(BigDecimal.valueOf(3000.00))
+                .medicalAllowance(BigDecimal.valueOf(4187.50))
+                .specialAllowance(BigDecimal.valueOf(4187.50))
+                .pfContribution(BigDecimal.valueOf(1800.00))
+                .professionalTax(BigDecimal.valueOf(200.00))
+                .isActive(true)
+                .build());
+
+        // 1 LOP day
+        payrollProcessingService.saveMonthlyPayrollInput(MonthlyPayrollInputDto.builder()
+                .employeeId(precisionEmp.getId())
+                .payrollMonth("OCTOBER")
+                .payrollYear(2026)
+                .lopDays(1.0)
+                .build());
+
+        List<PayrollRecordDto> records = payrollProcessingService.processBatchPayroll("OCTOBER", 2026);
+        PayrollRecordDto rec = records.stream()
+                .filter(r -> r.getEmployeeId().equals(precisionEmp.getId()))
+                .findFirst()
+                .orElseThrow();
+
+        // Total Fixed Gross must exactly equal Earned Fixed Gross + LOP Amount with 0.00 paisa drift
+        BigDecimal earnedBasicAndAllowances = rec.getCalculatedBasic()
+                .add(rec.getCalculatedHra())
+                .add(rec.getCalculatedConveyance())
+                .add(rec.getCalculatedMedical())
+                .add(rec.getCalculatedSpecial());
+
+        // Subcomponents must balance perfectly with earnedFixedGross
+        assertEquals(rec.getTotalGrossPay(), earnedBasicAndAllowances);
+
+        // Earned + LOP must equal Master Fixed Gross (₹45,500.00)
+        assertEquals(fixedGross.setScale(2), rec.getTotalGrossPay().add(rec.getLopDeductionAmount()).setScale(2));
+    }
+
+    @Test
+    @DisplayName("Test 10: Publish Workflow & Exemption Status Preservation (Defect 8)")
+    void testPublishWorkflowAndExemptionPreservation() {
+        Employee exemptEmp = employeeRepository.save(Employee.builder()
+                .firstName("Suresh")
+                .lastName("Raina")
+                .email("suresh.exempt." + UUID.randomUUID() + "@company.com")
+                .employeeCode("EMP-EXEMPT-02")
+                .role("EMPLOYEE")
+                .isPayrollExempt(true)
+                .build());
+
+        // 1. Process batch payroll (creates DRAFT & EXEMPT)
+        payrollProcessingService.processBatchPayroll("OCTOBER", 2026);
+
+        // 2. Direct publish on unverified DRAFTs must throw IllegalStateException
+        assertThrows(IllegalStateException.class, () ->
+                payrollProcessingService.publishBatchPayroll("OCTOBER", 2026));
+
+        // 3. Verify payroll
+        payrollProcessingService.verifyBatchPayroll("OCTOBER", 2026);
+
+        // 4. Publish payroll
+        payrollProcessingService.publishBatchPayroll("OCTOBER", 2026);
+
+        // 5. Verify exempt employee is STILL EXEMPT and not converted to PUBLISHED
+        List<PayrollRecordDto> all = payrollProcessingService.getPayrollRecordsForMonth("OCTOBER", 2026);
+        PayrollRecordDto exemptRec = all.stream()
+                .filter(r -> r.getEmployeeId().equals(exemptEmp.getId()))
+                .findFirst()
+                .orElseThrow();
+        assertEquals(PayrollStatus.EXEMPT, exemptRec.getStatus(), "EXEMPT record must remain EXEMPT after publish");
+    }
+
+    @Test
+    @DisplayName("Test 11: Payslip IDOR / Record Owner Authorization Helper (Defect 4)")
+    void testIsRecordOwnerAuthorization() {
+        assertTrue(payrollProcessingService.isRecordOwner(testEmployee.getId(), "aarav.payroll.test@company.com"));
+        assertTrue(payrollProcessingService.isRecordOwner(testEmployee.getId(), "AARAV.PAYROLL.TEST@COMPANY.COM"));
+        assertFalse(payrollProcessingService.isRecordOwner(testEmployee.getId(), "intruder@malicious.com"));
+        assertFalse(payrollProcessingService.isRecordOwner(999999L, "aarav.payroll.test@company.com"));
+        assertFalse(payrollProcessingService.isRecordOwner(null, "aarav.payroll.test@company.com"));
+        assertFalse(payrollProcessingService.isRecordOwner(testEmployee.getId(), null));
+    }
+
+    @Test
+    @DisplayName("Test 12: Section 87A Marginal Relief Under New Regime (Defect 10)")
+    void testSection87AMarginalRelief() {
+        com.example.hr_management_backend.features.payroll.tax.NewRegimeTaxStrategy strategy =
+                new com.example.hr_management_backend.features.payroll.tax.NewRegimeTaxStrategy();
+
+        // 1. Gross ₹7,75,000 (Taxable = ₹7,00,000 after standard deduction) -> Tax = ₹0
+        BigDecimal annualTaxAt7L = strategy.calculateAnnualTax(BigDecimal.valueOf(775000), null);
+        assertEquals(BigDecimal.ZERO.setScale(2), annualTaxAt7L);
+
+        // 2. Gross ₹7,05,000 (Taxable = ₹6,30,000 <= 7L) -> Tax = ₹0
+        BigDecimal annualTaxBelow7L = strategy.calculateAnnualTax(BigDecimal.valueOf(705000), null);
+        assertEquals(BigDecimal.ZERO.setScale(2), annualTaxBelow7L);
+
+        // 3. Gross ₹7,80,000 (Taxable = ₹7,05,000, income above rebate = ₹5,000)
+        // Normal tax before relief = 20,500. Relief caps tax to 5,000 + 4% cess = 5,200.00!
+        BigDecimal taxWithRelief5k = strategy.calculateAnnualTax(BigDecimal.valueOf(780000), null);
+        assertEquals(BigDecimal.valueOf(5200.00).setScale(2), taxWithRelief5k);
+
+        // 4. Gross ₹7,85,000 (Taxable = ₹7,10,000, income above rebate = ₹10,000)
+        // Normal tax before relief = 21,000. Relief caps tax to 10,000 + 4% cess = 10,400.00!
+        BigDecimal taxWithRelief10k = strategy.calculateAnnualTax(BigDecimal.valueOf(785000), null);
+        assertEquals(BigDecimal.valueOf(10400.00).setScale(2), taxWithRelief10k);
+    }
 }
 

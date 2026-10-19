@@ -57,10 +57,16 @@ public class BankPayoutExportService {
 
             String name = sanitizeCsv(rec.getEmployeeName());
             String code = sanitizeCsv(rec.getEmployeeCode());
-            String acct = rec.getBankAccountNumber() != null && !rec.getBankAccountNumber().isBlank()
-                    ? sanitizeCsv(rec.getBankAccountNumber())
-                    : "50100" + (10000000L + rec.getEmployeeId()); // Fallback deterministic account
-            String ifsc = "HDFC0001234";
+            String acctRaw = (emp != null && emp.getBankAccountNumber() != null && !emp.getBankAccountNumber().isBlank())
+                    ? emp.getBankAccountNumber()
+                    : rec.getBankAccountNumber();
+            String cleanAcct = acctRaw != null ? acctRaw.replaceAll("[^0-9]", "") : "";
+            String acct = !cleanAcct.isBlank()
+                    ? cleanAcct
+                    : "50100" + (10000000L + rec.getEmployeeId());
+            String ifsc = (emp != null && emp.getIfscCode() != null && !emp.getIfscCode().isBlank())
+                    ? emp.getIfscCode().trim().toUpperCase()
+                    : "HDFC0001234";
             String amount = rec.getNetPay() != null ? rec.getNetPay().toPlainString() : "0.00";
             String mode = rec.getNetPay() != null && rec.getNetPay().doubleValue() >= 200000 ? "RTGS" : "NEFT";
             String dept = sanitizeCsv(rec.getDepartment());
