@@ -155,8 +155,10 @@ class AuthLifecycleAndOptimizationTest {
                 .expiresAt(LocalDateTime.now().plusHours(24))
                 .build();
 
-        when(userActivationTokenRepository.findFirstByActivationKeyHashAndExpiresAtAfter(anyString(), any(LocalDateTime.class)))
+        when(userActivationTokenRepository.findFirstByActivationKeyHashOrderByCreatedAtDesc(anyString()))
                 .thenReturn(Optional.of(token));
+        when(userActivationTokenRepository.markTokenUsedAtomically(anyLong(), any(LocalDateTime.class)))
+                .thenReturn(1);
         when(userRepository.findById(4L)).thenReturn(Optional.of(user));
         when(passwordEncoder.encode("SecurePass123!")).thenReturn("encoded_pass");
 
@@ -189,7 +191,7 @@ class AuthLifecycleAndOptimizationTest {
                 .expiresAt(LocalDateTime.now().plusHours(24))
                 .build();
 
-        when(userActivationTokenRepository.findFirstByActivationKeyHashAndExpiresAtAfter(anyString(), any(LocalDateTime.class)))
+        when(userActivationTokenRepository.findFirstByActivationKeyHashOrderByCreatedAtDesc(anyString()))
                 .thenReturn(Optional.of(token));
         when(userRepository.findById(5L)).thenReturn(Optional.of(user));
 

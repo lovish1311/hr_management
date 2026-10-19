@@ -35,6 +35,9 @@ public class UserActivationToken {
     @Column(nullable = false)
     private Boolean used = false;
 
+    @Column(name = "used_at")
+    private LocalDateTime usedAt;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

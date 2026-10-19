@@ -36,19 +36,46 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 java.util.List<String> authStrings = jwtUtils.getAuthoritiesFromJwtToken(jwt);
 
                 java.util.List<org.springframework.security.core.GrantedAuthority> authorities;
+                UserPrincipal principal;
+
                 if (authStrings != null && !authStrings.isEmpty()) {
                     // ZERO-QUERY FAST PATH: Direct in-memory authentication from cryptographically verified claims
                     authorities = authStrings.stream()
                             .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
                             .collect(java.util.stream.Collectors.toList());
+
+                    Long userId = jwtUtils.getClaimLong(jwt, "userId");
+                    Long employeeId = jwtUtils.getClaimLong(jwt, "employeeId");
+                    String role = jwtUtils.getClaimString(jwt, "role");
+                    String systemRole = jwtUtils.getClaimString(jwt, "systemRole");
+
+                    principal = UserPrincipal.builder()
+                            .id(userId)
+                            .email(username)
+                            .password("")
+                            .employeeId(employeeId)
+                            .role(role != null ? role : "EMPLOYEE")
+                            .systemRole(systemRole != null ? systemRole : "NONE")
+                            .authorities(authorities)
+                            .accountStatus("ACTIVE")
+                            .isActivated(true)
+                            .build();
                 } else {
                     // Fallback to DB for legacy tokens
                     UserDetails userDetails = userDetailsService.loadUserByUsername(username);
                     authorities = new java.util.ArrayList<>(userDetails.getAuthorities());
+                    if (userDetails instanceof UserPrincipal up) {
+                        principal = up;
+                    } else {
+                        principal = UserPrincipal.builder()
+                                .email(username)
+                                .password("")
+                                .authorities(authorities)
+                                .accountStatus("ACTIVE")
+                                .isActivated(true)
+                                .build();
+                    }
                 }
-
-                org.springframework.security.core.userdetails.User principal =
-                        new org.springframework.security.core.userdetails.User(username, "", authorities);
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(

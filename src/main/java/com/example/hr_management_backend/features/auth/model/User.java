@@ -37,26 +37,25 @@ public class User {
 
     @Builder.Default
     @Column(name = "is_activated")
-    private Boolean isActivated = true;
+    private Boolean isActivated = false;
 
     @Builder.Default
     @Column(name = "account_status", length = 50)
-    private String accountStatus = "ACTIVE"; // PENDING_ACTIVATION, ACTIVE, DEACTIVATED
+    private String accountStatus = "PENDING_ACTIVATION"; // PENDING_ACTIVATION, ACTIVE, DEACTIVATED
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @PrePersist
-    @PostLoad
     protected void onInit() {
         if (createdAt == null) {
             createdAt = LocalDateTime.now();
         }
         if (isActivated == null) {
-            isActivated = true;
+            isActivated = false;
         }
         if (accountStatus == null || accountStatus.isBlank()) {
-            accountStatus = "ACTIVE";
+            accountStatus = "PENDING_ACTIVATION";
         }
     }
 }

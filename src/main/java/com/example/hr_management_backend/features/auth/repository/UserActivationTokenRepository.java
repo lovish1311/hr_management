@@ -19,6 +19,12 @@ public interface UserActivationTokenRepository extends JpaRepository<UserActivat
     Optional<UserActivationToken> findFirstByActivationKeyHashAndExpiresAtAfter(
             String activationKeyHash, LocalDateTime now);
 
+    Optional<UserActivationToken> findFirstByActivationKeyHashOrderByCreatedAtDesc(String activationKeyHash);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE UserActivationToken u SET u.used = true, u.usedAt = :now WHERE u.id = :id AND u.used = false AND u.expiresAt > :now")
+    int markTokenUsedAtomically(@Param("id") Long id, @Param("now") LocalDateTime now);
+
     @Modifying
     @Query("UPDATE UserActivationToken u SET u.used = true WHERE u.userId = :userId AND u.used = false")
     void invalidateActiveTokensForUser(@Param("userId") Long userId);

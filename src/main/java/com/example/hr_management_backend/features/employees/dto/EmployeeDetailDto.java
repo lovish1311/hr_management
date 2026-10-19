@@ -41,6 +41,8 @@ public class EmployeeDetailDto {
     private String todayAttendanceStatus; // e.g. PRESENT, LATE, ABSENT, ON_LEAVE, EXEMPT
     private Integer leaveBalance;
     private Boolean hasTambolaAccess;
+    private Boolean isActivated;
+    private String accountStatus;
     @Builder.Default
     private java.util.List<String> authorities = new java.util.ArrayList<>();
 }

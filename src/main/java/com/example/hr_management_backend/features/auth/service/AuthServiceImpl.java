@@ -131,18 +131,22 @@ public class AuthServiceImpl implements AuthService {
             employee.setLastName(registerRequest.getLastName());
             employee.setEmail(cleanEmail);
             employee.setDepartment(registerRequest.getDepartment() != null ? registerRequest.getDepartment() : "General");
-            employee.setRole(registerRequest.getRole() != null ? registerRequest.getRole() : "EMPLOYEE");
+            employee.setRole("EMPLOYEE");
             Employee savedEmployee = employeeRepository.save(employee);
             employeeId = savedEmployee.getId();
         }
 
-        String userRole = registerRequest.getRole() != null ? registerRequest.getRole() : "EMPLOYEE";
+        // Hardcode standard employee role for public registration to prevent privilege escalation
+        String userRole = "ROLE_EMPLOYEE";
 
         User user = User.builder()
                 .email(cleanEmail)
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .role(userRole)
+                .systemRole("NONE")
                 .employeeId(employeeId)
+                .isActivated(true)
+                .accountStatus("ACTIVE")
                 .build();
 
         userRepository.save(user);
@@ -174,11 +178,21 @@ public class AuthServiceImpl implements AuthService {
             });
         }
 
-        return userRepository.save(user);
+        User saved = userRepository.save(user);
+        jwtUtils.revokeUserTokens(user.getEmail());
+        log.info("[Role Update] Updated role for user {} to {}. Prior tokens revoked.", user.getEmail(), formattedRole);
+        return saved;
     }
 
     @Override
     public void logout(String token) {
+        if (token != null && token.startsWith("Bearer ")) {
+            String jwt = token.substring(7);
+            try {
+                String username = jwtUtils.getUserNameFromJwtToken(jwt);
+                jwtUtils.revokeUserTokens(username);
+            } catch (Exception ignored) {}
+        }
         SecurityContextHolder.clearContext();
     }
 
@@ -227,7 +241,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = {IllegalArgumentException.class, IllegalStateException.class})
     public void resetPassword(String email, String token, String newPassword) {
         String cleanEmail = email != null ? email.trim().toLowerCase() : "";
         String cleanToken = token != null ? token.trim() : "";
@@ -235,30 +249,38 @@ public class AuthServiceImpl implements AuthService {
 
         PasswordResetToken resetToken = passwordResetTokenRepository
                 .findFirstByEmailAndUsedFalseAndExpiresAtAfterOrderByCreatedAtDesc(cleanEmail, LocalDateTime.now())
-                .orElseThrow(() -> new RuntimeException("Invalid or expired verification code. Please request a new code."));
+                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired verification code. Please request a new code."));
 
         // Persist attempt count immediately in an isolated transaction so it is never rolled back
         passwordResetTokenRepository.incrementAttemptCount(resetToken.getId());
         int currentAttempts = (resetToken.getAttemptCount() != null ? resetToken.getAttemptCount() : 0) + 1;
 
-        if (!resetToken.getTokenHash().equals(tokenHash)) {
+        // Constant-time hash verification against timing attacks
+        boolean isValidOtp = MessageDigest.isEqual(
+                resetToken.getTokenHash().getBytes(StandardCharsets.UTF_8),
+                tokenHash.getBytes(StandardCharsets.UTF_8)
+        );
+
+        if (!isValidOtp) {
             if (currentAttempts >= 5) {
                 passwordResetTokenRepository.markTokenUsed(resetToken.getId());
                 log.warn("[Password Reset Security] Max attempts exceeded for email: {}. Token invalidated.", cleanEmail);
-                throw new RuntimeException("Too many incorrect attempts. This verification code has been deactivated for security. Please request a new code.");
+                throw new IllegalArgumentException("Too many incorrect attempts. This verification code has been deactivated for security. Please request a new code.");
             }
             int remaining = 5 - currentAttempts;
-            throw new RuntimeException("Invalid verification code. " + remaining + " attempt(s) remaining.");
+            throw new IllegalArgumentException("Invalid verification code. " + remaining + " attempt(s) remaining.");
         }
 
         User user = userRepository.findById(resetToken.getUserId())
-                .orElseThrow(() -> new RuntimeException("User account not found"));
+                .orElseThrow(() -> new com.example.hr_management_backend.core.exception.ResourceNotFoundException("User account not found"));
 
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
         passwordResetTokenRepository.markTokenUsed(resetToken.getId());
-        log.info("[Password Reset] Password reset successfully for user: {}", cleanEmail);
+        passwordResetTokenRepository.invalidateActiveTokensForEmail(cleanEmail);
+        jwtUtils.revokeUserTokens(cleanEmail);
+        log.info("[Password Reset] Password reset successfully for user: {}. Revoked all existing sessions.", cleanEmail);
     }
 
     @Override
@@ -267,16 +289,31 @@ public class AuthServiceImpl implements AuthService {
         String cleanKey = activationKey != null ? activationKey.trim() : "";
         String keyHash = sha256(cleanKey);
 
+        // Fetch latest token by hash to provide accurate client feedback (expired vs used vs invalid)
         UserActivationToken token = userActivationTokenRepository
-                .findFirstByActivationKeyHashAndExpiresAtAfter(keyHash, LocalDateTime.now())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid or expired activation key. Please contact HR."));
+                .findFirstByActivationKeyHashOrderByCreatedAtDesc(keyHash)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid activation key. Please check your credentials or contact HR."));
+
+        if (Boolean.TRUE.equals(token.getUsed())) {
+            throw new IllegalStateException("This activation key has already been used! If you already activated your account, please sign in.");
+        }
+
+        if (token.getExpiresAt() != null && token.getExpiresAt().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("This activation key has expired. Please ask HR to send a new activation key.");
+        }
 
         User user = userRepository.findById(token.getUserId())
                 .orElseThrow(() -> new com.example.hr_management_backend.core.exception.ResourceNotFoundException("User account not found"));
 
-        if (Boolean.TRUE.equals(token.getUsed()) || Boolean.TRUE.equals(user.getIsActivated()) || "ACTIVE".equalsIgnoreCase(user.getAccountStatus())) {
+        if (Boolean.TRUE.equals(user.getIsActivated()) || "ACTIVE".equalsIgnoreCase(user.getAccountStatus())) {
             log.info("[Account Activation] Activation attempted on already-active user: {}", user.getEmail());
             throw new IllegalStateException("Your account has already been activated! Please sign in with your email and password.");
+        }
+
+        // Atomic conditional update to eliminate concurrency race conditions
+        int updated = userActivationTokenRepository.markTokenUsedAtomically(token.getId(), LocalDateTime.now());
+        if (updated == 0) {
+            throw new IllegalStateException("This activation key is already being processed or has expired. Please try signing in.");
         }
 
         user.setPassword(passwordEncoder.encode(newPassword));
@@ -285,6 +322,7 @@ public class AuthServiceImpl implements AuthService {
         userRepository.save(user);
 
         token.setUsed(true);
+        token.setUsedAt(LocalDateTime.now());
         userActivationTokenRepository.save(token);
         userActivationTokenRepository.invalidateActiveTokensForUser(user.getId());
 

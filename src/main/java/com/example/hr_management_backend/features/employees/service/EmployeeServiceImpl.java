@@ -55,6 +55,7 @@ public class EmployeeServiceImpl implements EmployeeService {
     private final EmailOutboxService emailOutboxService;
     private final PasswordEncoder passwordEncoder;
     private final com.example.hr_management_backend.features.auth.websocket.PermissionWebSocketSessionManager permissionWebSocketSessionManager;
+    private final com.example.hr_management_backend.core.security.JwtUtils jwtUtils;
     @org.springframework.beans.factory.annotation.Qualifier("dbExecutor")
     private final java.util.concurrent.Executor dbExecutor;
 
@@ -171,12 +172,33 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setEmploymentType(employeeDetails.getEmploymentType());
         employee.setStatus(employeeDetails.getStatus());
         employee.setRelievingDate(employeeDetails.getRelievingDate());
-        if ("TERMINATED".equalsIgnoreCase(employeeDetails.getStatus())) {
+        if ("TERMINATED".equalsIgnoreCase(employeeDetails.getStatus()) || "INACTIVE".equalsIgnoreCase(employeeDetails.getStatus())) {
             userRepository.findByEmail(employee.getEmail()).ifPresent(u -> {
                 u.setAccountStatus("DEACTIVATED");
                 userRepository.save(u);
                 userActivationTokenRepository.invalidateActiveTokensForUser(u.getId());
-                log.info("[Employee Update] Employee {} marked TERMINATED. Deactivated user account {}", employee.getId(), u.getEmail());
+                log.info("[Employee Update] Employee {} marked {}. Deactivated user account {}", employee.getId(), employeeDetails.getStatus(), u.getEmail());
+            });
+            if (employee.getEmail() != null) {
+                jwtUtils.revokeUserTokens(employee.getEmail());
+            }
+            try {
+                permissionWebSocketSessionManager.sendPermissionUpdate(employee.getId(), java.util.Map.of(
+                        "type", "ACCOUNT_DEACTIVATED",
+                        "employeeId", employee.getId(),
+                        "message", "Your account has been deactivated by an administrator.",
+                        "timestamp", System.currentTimeMillis()
+                ));
+            } catch (Exception e) {
+                log.warn("Failed to dispatch deactivation WebSocket event for employeeId {}: {}", employee.getId(), e.getMessage());
+            }
+        } else if ("ACTIVE".equalsIgnoreCase(employeeDetails.getStatus())) {
+            userRepository.findByEmail(employee.getEmail()).ifPresent(u -> {
+                if ("DEACTIVATED".equalsIgnoreCase(u.getAccountStatus())) {
+                    u.setAccountStatus("ACTIVE");
+                    userRepository.save(u);
+                    log.info("[Employee Update] Employee {} marked ACTIVE. Restored user account status for {}", employee.getId(), u.getEmail());
+                }
             });
         }
         employee.setBiometricName(employeeDetails.getBiometricName());
@@ -564,6 +586,16 @@ public class EmployeeServiceImpl implements EmployeeService {
         String todayStatus = computeTodayStatus(employee);
         int leaveBalance = computeLeaveBalance(employee.getId());
 
+        Boolean isActivated = null;
+        String accountStatus = null;
+        if (employee.getEmail() != null && !employee.getEmail().isBlank()) {
+            var uOpt = userRepository.findByEmail(employee.getEmail().trim().toLowerCase());
+            if (uOpt.isPresent()) {
+                isActivated = uOpt.get().getIsActivated();
+                accountStatus = uOpt.get().getAccountStatus();
+            }
+        }
+
         return EmployeeDetailDto.builder()
                 .id(employee.getId())
                 .employeeCode(employee.getEmployeeCode())
@@ -594,6 +626,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .todayAttendanceStatus(todayStatus)
                 .leaveBalance(leaveBalance)
                 .hasTambolaAccess(Boolean.TRUE.equals(employee.getHasTambolaAccess()))
+                .isActivated(isActivated)
+                .accountStatus(accountStatus)
                 .authorities(authorities)
                 .build();
     }

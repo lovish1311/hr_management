@@ -55,7 +55,7 @@ public class CustomUserDetailsService implements UserDetailsService {
 
         Long empId = user.getEmployeeId();
         if (empId == null) {
-            empId = employeeRepository.findByEmail(email).map(Employee::getId).orElse(null);
+            empId = employeeRepository.findByEmail(cleanEmail).map(Employee::getId).orElse(null);
         }
 
         if (empId != null) {
