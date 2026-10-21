@@ -1134,11 +1134,7 @@ public class LeaveService {
             // Hour-based: aggregate actual duration in hours using startTime and endTime
             int hourlyLimit = parseIntSetting("time_off_hourly_limit", 4);
 
-            double incomingHours = 1.0;
-            if (request.getStartTime() != null && request.getEndTime() != null) {
-                long mins = ChronoUnit.MINUTES.between(request.getStartTime(), request.getEndTime());
-                if (mins > 0) incomingHours = mins / 60.0;
-            }
+            double incomingHours = computeHoursBridged(request.getStartTime(), request.getEndTime());
 
             if ("HOURLY_COMBINED".equalsIgnoreCase(policyMode)) {
                 double usedHours = computeTotalTimeBasedHours(request.getEmployeeId(), cycleStart, cycleEnd, null);
@@ -1158,16 +1154,19 @@ public class LeaveService {
                 policyMode, cycle, normalizedType, request.getEmployeeId());
     }
 
+    private double computeHoursBridged(LocalTime start, LocalTime end) {
+        if (start == null || end == null || start.equals(end)) return 1.0;
+        long mins = end.isAfter(start)
+                ? ChronoUnit.MINUTES.between(start, end)
+                : (ChronoUnit.MINUTES.between(start, LocalTime.MAX) + 1 + ChronoUnit.MINUTES.between(LocalTime.MIN, end));
+        return mins > 0 ? mins / 60.0 : 1.0;
+    }
+
     private double computeTotalTimeBasedHours(Long employeeId, LocalDate cycleStart, LocalDate cycleEnd, String typePattern) {
         List<LeaveRequest> requests = leaveRequestRepository.findTimeBasedRequestsInCycle(employeeId, cycleStart, cycleEnd, typePattern);
         double totalHours = 0.0;
         for (LeaveRequest req : requests) {
-            if (req.getStartTime() != null && req.getEndTime() != null) {
-                long mins = ChronoUnit.MINUTES.between(req.getStartTime(), req.getEndTime());
-                totalHours += (mins > 0 ? mins / 60.0 : 1.0);
-            } else {
-                totalHours += 1.0;
-            }
+            totalHours += computeHoursBridged(req.getStartTime(), req.getEndTime());
         }
         return totalHours;
     }

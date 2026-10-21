@@ -66,8 +66,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long
     @Query("SELECT COUNT(lr) FROM LeaveRequest lr WHERE lr.employeeId = :employeeId " +
            "AND lr.status IN ('APPROVED', 'PENDING', 'CANCEL_REQUESTED') " +
            "AND lr.startDate >= :cycleStart AND lr.startDate <= :cycleEnd " +
-           "AND (lr.isTimeBased = true OR UPPER(lr.leaveType) LIKE :typePattern) " +
-           "AND (UPPER(lr.leaveType) LIKE :typePattern)")
+           "AND UPPER(lr.leaveType) LIKE :typePattern")
     long countTimeBasedRequestsInCycle(@Param("employeeId") Long employeeId,
                                        @Param("cycleStart") LocalDate cycleStart,
                                        @Param("cycleEnd") LocalDate cycleEnd,
