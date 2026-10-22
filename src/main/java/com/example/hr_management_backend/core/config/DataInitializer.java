@@ -34,10 +34,12 @@ public class DataInitializer implements CommandLineRunner {
     private final AttendanceRepository attendanceRepository;
     private final PasswordEncoder passwordEncoder;
     private final com.example.hr_management_backend.features.payroll.service.PayrollService payrollService;
+    private final com.example.hr_management_backend.features.banners.repository.BannerRepository bannerRepository;
 
     @Override
     public void run(String... args) throws Exception {
         log.info("Ensuring complete production data seeding (1 Admin, 1 HR: Aadisha Dhullar, 3 Managers, 28 Excel Employees)...");
+        seedDefaultBanners();
 
             // 1. Super Admin: Bust the rule that super admins can't have their own ID!
             // Super Admin has its own employee entity (EMP-001) alongside system role SUPER_ADMIN
@@ -370,6 +372,57 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         log.info("Lovish Kumar September 2026 attendance seeded: 18 present, 3 late arrivals (15m past grace), 1 early departure (20m early), 2 full leaves, 2 short breaks.");
+    }
+
+    private void seedDefaultBanners() {
+        if (bannerRepository.count() > 0) return;
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+
+        com.example.hr_management_backend.features.banners.model.Banner diwali = com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("Diwali Gala & Grand Celebration 🪔✨")
+                .subtitle("Join us for festivities, sweets, games, and cultural performances this Friday!")
+                .category(com.example.hr_management_backend.features.banners.model.BannerCategory.FESTIVAL)
+                .imageUrl("https://images.unsplash.com/photo-1514525253161-7a46d19cd819")
+                .actionUrl("https://company.internal/celebrations/diwali")
+                .actionButtonText("View Celebrations")
+                .backgroundGradient("linear-gradient(135deg, #7C3AED, #DB2777)")
+                .startDate(now.minusDays(1))
+                .expiryDate(now.plusDays(7))
+                .displayOrder(1)
+                .isActive(true)
+                .version(0L)
+                .build();
+
+        com.example.hr_management_backend.features.banners.model.Banner bday = com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("Happy Birthday Lovish Kumar! 🎂🎉")
+                .subtitle("Wishing our Senior Software Engineer a phenomenal year of growth and achievements!")
+                .category(com.example.hr_management_backend.features.banners.model.BannerCategory.BIRTHDAY)
+                .imageUrl("https://images.unsplash.com/photo-1513151233558-d860c5398176")
+                .actionButtonText("Send Wishes")
+                .backgroundGradient("linear-gradient(135deg, #F59E0B, #EF4444)")
+                .startDate(now.minusHours(4))
+                .expiryDate(now.plusDays(1))
+                .displayOrder(2)
+                .isActive(true)
+                .version(0L)
+                .build();
+
+        com.example.hr_management_backend.features.banners.model.Banner townhall = com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("All-Hands Townhall & Tech Showcase 🚀")
+                .subtitle("Executive leadership quarterly review and live demo of new HR & game platforms.")
+                .category(com.example.hr_management_backend.features.banners.model.BannerCategory.OFFICE_EVENT)
+                .imageUrl("https://images.unsplash.com/photo-1540575467063-178a50c2df87")
+                .actionButtonText("View Schedule")
+                .backgroundGradient("linear-gradient(135deg, #2563EB, #06B6D4)")
+                .startDate(now.minusDays(2))
+                .expiryDate(now.plusDays(5))
+                .displayOrder(3)
+                .isActive(true)
+                .version(0L)
+                .build();
+
+        bannerRepository.saveAll(List.of(diwali, bday, townhall));
+        log.info("Default promotional & celebration banners seeded successfully.");
     }
 
     private static class AttendanceRecordSpec {

@@ -40,14 +40,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 if (authStrings != null && !authStrings.isEmpty()) {
                     // ZERO-QUERY FAST PATH: Direct in-memory authentication from cryptographically verified claims
-                    authorities = authStrings.stream()
-                            .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                            .collect(java.util.stream.Collectors.toList());
-
                     Long userId = jwtUtils.getClaimLong(jwt, "userId");
                     Long employeeId = jwtUtils.getClaimLong(jwt, "employeeId");
                     String role = jwtUtils.getClaimString(jwt, "role");
                     String systemRole = jwtUtils.getClaimString(jwt, "systemRole");
+
+                    java.util.Set<String> mergedAuths = new java.util.LinkedHashSet<>(authStrings);
+                    if (employeeId != null) {
+                        try {
+                            java.util.List<String> dynamicAuths = userDetailsService.getDynamicAuthorities(employeeId);
+                            if (dynamicAuths != null && !dynamicAuths.isEmpty()) {
+                                mergedAuths.addAll(dynamicAuths);
+                            }
+                        } catch (Exception ignored) {}
+                    }
+
+                    authorities = mergedAuths.stream()
+                            .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
+                            .collect(java.util.stream.Collectors.toList());
 
                     principal = UserPrincipal.builder()
                             .id(userId)

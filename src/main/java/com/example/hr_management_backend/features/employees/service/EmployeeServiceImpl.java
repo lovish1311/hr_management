@@ -446,7 +446,7 @@ public class EmployeeServiceImpl implements EmployeeService {
 
     @Override
     @Transactional
-    @CacheEvict(value = {"employees", "employee_details"}, allEntries = true)
+    @CacheEvict(value = {"employees", "employee_details", "user_authorities"}, allEntries = true)
     public EmployeeDetailDto elevateRoleAndPermissions(Long employeeId, ElevateEmployeeDto dto, String actorEmail) {
         User actorUser = userRepository.findByEmail(actorEmail).orElse(null);
         boolean isActorSuperAdmin = "admin@company.com".equalsIgnoreCase(actorEmail) ||

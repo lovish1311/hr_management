@@ -118,4 +118,12 @@ public class CustomUserDetailsService implements UserDetailsService {
                 .authorities(grantedAuthorities)
                 .build();
     }
+
+    @org.springframework.cache.annotation.Cacheable(value = "user_authorities", key = "#employeeId")
+    public List<String> getDynamicAuthorities(Long employeeId) {
+        if (employeeId == null) {
+            return List.of();
+        }
+        return employeeAuthorityRepository.findAuthoritiesByEmployeeId(employeeId);
+    }
 }

@@ -5,7 +5,7 @@ This graph catalogs all project nodes, domains, architectural layers, database e
 
 - **Total Nodes**: 232
 - **Total Edges**: 418
-- **Features / Modules**: attendance, auth, core, dashboard, email, employees, games, holidays, leaves, payroll, performance, recruitment, scribbil, settings, tambola
+- **Features / Modules**: attendance, auth, banners, core, dashboard, email, employees, games, holidays, leaves, payroll, performance, recruitment, scribbil, settings, tambola
 
 ---
 
@@ -28,6 +28,24 @@ Total Components: 14
 | <a id="node-biometricimportrowdto"></a>`BiometricImportRowDto` | `dto` | [`src/main/java/com/example/hr_management_backend/features/attendance/dto/BiometricImportRowDto.java`](src/main/java/com/example/hr_management_backend/features/attendance/dto/BiometricImportRowDto.java) |  |  |
 | <a id="node-biometricimportsummarydto"></a>`BiometricImportSummaryDto` | `dto` | [`src/main/java/com/example/hr_management_backend/features/attendance/dto/BiometricImportSummaryDto.java`](src/main/java/com/example/hr_management_backend/features/attendance/dto/BiometricImportSummaryDto.java) |  |  |
 | <a id="node-leaveeventlistener"></a>`LeaveEventListener` | `listener` | [`src/main/java/com/example/hr_management_backend/features/attendance/listener/LeaveEventListener.java`](src/main/java/com/example/hr_management_backend/features/attendance/listener/LeaveEventListener.java) |  | [AttendanceService](#node-attendanceservice), [LeaveApprovedEvent](#node-leaveapprovedevent), [LeaveWithdrawnEvent](#node-leavewithdrawnevent) |
+
+---
+
+## Module / Domain Node: `BANNERS`
+Total Components: 10
+
+| Node ID / Class | Layer | Path | Table / Endpoint | Dependencies |
+|---|---|---|---|---|
+| <a id="node-banner"></a>`Banner` | `model` | [`src/main/java/com/example/hr_management_backend/features/banners/model/Banner.java`](src/main/java/com/example/hr_management_backend/features/banners/model/Banner.java) | Table: `banners` | [BannerCategory](#node-bannercategory) |
+| <a id="node-bannercategory"></a>`BannerCategory` | `model` | [`src/main/java/com/example/hr_management_backend/features/banners/model/BannerCategory.java`](src/main/java/com/example/hr_management_backend/features/banners/model/BannerCategory.java) | Enum: CELEBRATION, BIRTHDAY, OFFICE_EVENT, ANNOUNCEMENT, FESTIVAL |  |
+| <a id="node-bannerdto"></a>`BannerDto` | `dto` | [`src/main/java/com/example/hr_management_backend/features/banners/dto/BannerDto.java`](src/main/java/com/example/hr_management_backend/features/banners/dto/BannerDto.java) | Transfer DTO | [BannerCategory](#node-bannercategory) |
+| <a id="node-createbannerrequest"></a>`CreateBannerRequest` | `dto` | [`src/main/java/com/example/hr_management_backend/features/banners/dto/CreateBannerRequest.java`](src/main/java/com/example/hr_management_backend/features/banners/dto/CreateBannerRequest.java) | Validation DTO | [BannerCategory](#node-bannercategory) |
+| <a id="node-updatebannerrequest"></a>`UpdateBannerRequest` | `dto` | [`src/main/java/com/example/hr_management_backend/features/banners/dto/UpdateBannerRequest.java`](src/main/java/com/example/hr_management_backend/features/banners/dto/UpdateBannerRequest.java) | Validation DTO (Optimistic Locking) | [BannerCategory](#node-bannercategory) |
+| <a id="node-bannerrepository"></a>`BannerRepository` | `repository` | [`src/main/java/com/example/hr_management_backend/features/banners/repository/BannerRepository.java`](src/main/java/com/example/hr_management_backend/features/banners/repository/BannerRepository.java) | Data Layer (Partial Index Candidates) | [Banner](#node-banner) |
+| <a id="node-bannerservice"></a>`BannerService` | `service` | [`src/main/java/com/example/hr_management_backend/features/banners/service/BannerService.java`](src/main/java/com/example/hr_management_backend/features/banners/service/BannerService.java) | Service Interface | [BannerDto](#node-bannerdto), [CreateBannerRequest](#node-createbannerrequest), [UpdateBannerRequest](#node-updatebannerrequest) |
+| <a id="node-bannerserviceimpl"></a>`BannerServiceImpl` | `service` | [`src/main/java/com/example/hr_management_backend/features/banners/service/BannerServiceImpl.java`](src/main/java/com/example/hr_management_backend/features/banners/service/BannerServiceImpl.java) | Candidate Cache & Microsecond Filtering | [BannerRepository](#node-bannerrepository), [BannerService](#node-bannerservice), [EmployeeRepository](#node-employeerepository) |
+| <a id="node-bannercontroller"></a>`BannerController` | `controller` | [`src/main/java/com/example/hr_management_backend/features/banners/controller/BannerController.java`](src/main/java/com/example/hr_management_backend/features/banners/controller/BannerController.java) | Endpoints: `/api/v1/banners` | [BannerService](#node-bannerservice), [EmployeeRepository](#node-employeerepository) |
+| <a id="node-bannerservicetest"></a>`BannerServiceTest` | `test` | [`src/test/java/com/example/hr_management_backend/features/banners/BannerServiceTest.java`](src/test/java/com/example/hr_management_backend/features/banners/BannerServiceTest.java) | JUnit 5 Concurrency & Security Tests | [BannerService](#node-bannerservice), [BannerRepository](#node-bannerrepository) |
 
 ---
 
