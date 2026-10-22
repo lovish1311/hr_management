@@ -26,7 +26,34 @@ public interface BannerRepository extends JpaRepository<Banner, Long> {
     List<Banner> findAllByOrderByCreatedAtDesc();
 
     /**
-     * Counts active, unexpired banners to enforce the system concurrency cap (max 15 banners).
+     * Counts active, currently live banners to enforce the system concurrency cap (max 15 banners).
+     * Pre-scheduled banners (startDate > now) do not consume the live display cap.
      */
-    long countByIsActiveTrueAndExpiryDateGreaterThanEqual(LocalDateTime now);
+    long countByIsActiveTrueAndStartDateLessThanEqualAndExpiryDateGreaterThanEqual(LocalDateTime nowStart, LocalDateTime nowExpiry);
+
+    /**
+     * Duplicate check for automated birthday and anniversary banners.
+     */
+    boolean existsByTargetEmployeeIdAndCelebrationTypeAndStartDateLessThanEqualAndExpiryDateGreaterThanEqual(
+            Long targetEmployeeId,
+            com.example.hr_management_backend.features.banners.model.CelebrationType celebrationType,
+            LocalDateTime maxStart,
+            LocalDateTime minExpiry
+    );
+
+    /**
+     * Finds expired banners for automated cleanup.
+     */
+    List<Banner> findByExpiryDateBefore(LocalDateTime expiry);
+
+    /**
+     * Finds expired celebration banners for batch purging.
+     */
+    List<Banner> findByBannerTypeAndExpiryDateBefore(com.example.hr_management_backend.features.banners.model.BannerType bannerType, LocalDateTime expiry);
+
+    /**
+     * Deletes expired celebration banners.
+     */
+    void deleteByExpiryDateBefore(LocalDateTime expiry);
 }
+

@@ -42,5 +42,14 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
 
     @Query(value = "SELECT nextval('employee_code_seq')", nativeQuery = true)
     Long getNextEmployeeCodeSequence();
+
+    @Query("SELECT e.department FROM Employee e WHERE e.id = :id")
+    Optional<String> findDepartmentById(@Param("id") Long id);
+
+    @Query("SELECT e FROM Employee e WHERE UPPER(e.status) IN ('ACTIVE', 'PROBATION') AND (e.relievingDate IS NULL OR e.relievingDate > :today)")
+    List<Employee> findActiveEmployeesForMilestones(@Param("today") java.time.LocalDate today);
+
+    @Query("SELECT DISTINCT e.department FROM Employee e WHERE e.department IS NOT NULL AND TRIM(e.department) <> '' ORDER BY e.department ASC")
+    List<String> findDistinctDepartments();
 }
 

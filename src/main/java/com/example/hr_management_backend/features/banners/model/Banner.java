@@ -6,7 +6,9 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "banners", indexes = {
-    @Index(name = "idx_banners_sched", columnList = "is_active, display_order, created_at"),
+    @Index(name = "idx_banners_active_expiry_order", columnList = "is_active, expiry_date, display_order, created_at"),
+    @Index(name = "idx_banners_type_expiry", columnList = "banner_type, expiry_date"),
+    @Index(name = "idx_banners_target_emp", columnList = "target_employee_id, celebration_type, start_date, expiry_date"),
     @Index(name = "idx_banners_expiry", columnList = "expiry_date")
 })
 @Data
@@ -28,6 +30,18 @@ public class Banner {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private BannerCategory category;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "banner_type", nullable = false, length = 32)
+    @Builder.Default
+    private BannerType bannerType = BannerType.NEWS;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "celebration_type", length = 32)
+    private CelebrationType celebrationType;
+
+    @Column(name = "target_employee_id")
+    private Long targetEmployeeId;
 
     @Column(name = "image_url", length = 500)
     private String imageUrl;
@@ -91,6 +105,9 @@ public class Banner {
         }
         if (version == null) {
             version = 0L;
+        }
+        if (bannerType == null) {
+            bannerType = BannerType.NEWS;
         }
     }
 

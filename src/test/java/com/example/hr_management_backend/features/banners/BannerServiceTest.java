@@ -27,8 +27,18 @@ public class BannerServiceTest {
     @Autowired
     private BannerRepository bannerRepository;
 
+    @Autowired
+    private com.example.hr_management_backend.features.banners.repository.BannerReactionRepository bannerReactionRepository;
+
+    @Autowired
+    private com.example.hr_management_backend.features.employees.repository.EmployeeRepository employeeRepository;
+
+    @Autowired
+    private com.example.hr_management_backend.features.banners.service.BannerLifecycleService bannerLifecycleService;
+
     @BeforeEach
     void setUp() {
+        bannerReactionRepository.deleteAll();
         bannerRepository.deleteAll();
     }
 
@@ -406,5 +416,300 @@ public class BannerServiceTest {
         assertThrows(IllegalArgumentException.class, () ->
                 bannerService.createBanner(unclosedScriptReq, "admin@company.com")
         );
+    }
+
+    @Test
+    @DisplayName("Toggling reaction idempotently adds and removes emoji reactions with authoritative state sync")
+    void testToggleReaction_IdempotentOneTapAndServerReconcile() {
+        LocalDateTime now = LocalDateTime.now();
+        BannerDto banner = bannerService.createBanner(CreateBannerRequest.builder()
+                .title("Town Hall Announcement")
+                .bannerType(com.example.hr_management_backend.features.banners.model.BannerType.NEWS)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build(), "admin@company.com");
+
+        Long empId = 999L;
+
+        // 1. First tap: Add LIKE
+        var summary1 = bannerService.toggleReaction(banner.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.LIKE, empId);
+        assertEquals(1L, summary1.getReactionCounts().get("LIKE"));
+        assertEquals(1L, summary1.getTotalReactions());
+        assertTrue(summary1.getUserReactions().contains("LIKE"));
+
+        // 2. Second tap: Remove LIKE
+        var summary2 = bannerService.toggleReaction(banner.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.LIKE, empId);
+        assertEquals(0L, summary2.getReactionCounts().get("LIKE"));
+        assertEquals(0L, summary2.getTotalReactions());
+        assertFalse(summary2.getUserReactions().contains("LIKE"));
+
+        // 3. Add multiple different reactions: LOVE and CELEBRATE
+        bannerService.toggleReaction(banner.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.LOVE, empId);
+        var summary3 = bannerService.toggleReaction(banner.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.CELEBRATE, empId);
+        assertEquals(1L, summary3.getReactionCounts().get("LOVE"));
+        assertEquals(1L, summary3.getReactionCounts().get("CELEBRATE"));
+        assertEquals(2L, summary3.getTotalReactions());
+        assertTrue(summary3.getUserReactions().contains("LOVE"));
+        assertTrue(summary3.getUserReactions().contains("CELEBRATE"));
+    }
+
+    @Test
+    @DisplayName("2-Query batch pipeline hydrates counts and user-specific reactions without 2N+1 queries")
+    void testBatchReactionHydration_TwoQueryPipeline() {
+        LocalDateTime now = LocalDateTime.now();
+        BannerDto b1 = bannerService.createBanner(CreateBannerRequest.builder()
+                .title("Post 1")
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build(), "admin@company.com");
+
+        BannerDto b2 = bannerService.createBanner(CreateBannerRequest.builder()
+                .title("Post 2")
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build(), "admin@company.com");
+
+        Long emp1 = 101L;
+        Long emp2 = 102L;
+
+        // emp1 likes b1 and b2
+        bannerService.toggleReaction(b1.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.LIKE, emp1);
+        bannerService.toggleReaction(b2.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.LIKE, emp1);
+
+        // emp2 celebrates b1
+        bannerService.toggleReaction(b1.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.CELEBRATE, emp2);
+
+        // Fetch feed as emp1
+        List<BannerDto> feedForEmp1 = bannerService.getActiveBanners(null, emp1);
+        assertEquals(2, feedForEmp1.size());
+
+        BannerDto resB1 = feedForEmp1.stream().filter(b -> b.getId().equals(b1.getId())).findFirst().orElseThrow();
+        assertEquals(1L, resB1.getReactionCounts().get("LIKE"));
+        assertEquals(1L, resB1.getReactionCounts().get("CELEBRATE"));
+        assertEquals(2L, resB1.getTotalReactions());
+        assertTrue(resB1.getUserReactions().contains("LIKE"));
+        assertFalse(resB1.getUserReactions().contains("CELEBRATE")); // CELEBRATE was by emp2!
+
+        BannerDto resB2 = feedForEmp1.stream().filter(b -> b.getId().equals(b2.getId())).findFirst().orElseThrow();
+        assertEquals(1L, resB2.getReactionCounts().get("LIKE"));
+        assertTrue(resB2.getUserReactions().contains("LIKE"));
+    }
+
+    @Test
+    @DisplayName("Engage feed filters cleanly between News and Celebrations")
+    void testEngageFeed_FilteredByBannerTypeAndCelebrationSubtype() {
+        LocalDateTime now = LocalDateTime.now();
+
+        // 1. News post
+        bannerService.createBanner(CreateBannerRequest.builder()
+                .title("Quarterly Town Hall")
+                .bannerType(com.example.hr_management_backend.features.banners.model.BannerType.NEWS)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build(), "admin@company.com");
+
+        // 2. Birthday celebration
+        bannerService.createBanner(CreateBannerRequest.builder()
+                .title("Happy Birthday Alex")
+                .bannerType(com.example.hr_management_backend.features.banners.model.BannerType.CELEBRATION)
+                .celebrationType(com.example.hr_management_backend.features.banners.model.CelebrationType.BIRTHDAY)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build(), "admin@company.com");
+
+        // 3. Anniversary celebration
+        bannerService.createBanner(CreateBannerRequest.builder()
+                .title("Happy 5th Anniversary Sam")
+                .bannerType(com.example.hr_management_backend.features.banners.model.BannerType.CELEBRATION)
+                .celebrationType(com.example.hr_management_backend.features.banners.model.CelebrationType.ANNIVERSARY)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build(), "admin@company.com");
+
+        // Feed: News Tab
+        List<BannerDto> newsFeed = bannerService.getEngageFeed(com.example.hr_management_backend.features.banners.model.BannerType.NEWS, null, 1L);
+        assertEquals(1, newsFeed.size());
+        assertEquals("Quarterly Town Hall", newsFeed.get(0).getTitle());
+
+        // Feed: Celebrations Tab - All
+        List<BannerDto> celebFeedAll = bannerService.getEngageFeed(com.example.hr_management_backend.features.banners.model.BannerType.CELEBRATION, null, 1L);
+        assertEquals(2, celebFeedAll.size());
+
+        // Feed: Celebrations Tab - Birthday Filter
+        List<BannerDto> birthdayFeed = bannerService.getEngageFeed(com.example.hr_management_backend.features.banners.model.BannerType.CELEBRATION, com.example.hr_management_backend.features.banners.model.CelebrationType.BIRTHDAY, 1L);
+        assertEquals(1, birthdayFeed.size());
+        assertEquals("Happy Birthday Alex", birthdayFeed.get(0).getTitle());
+    }
+
+    @Test
+    @DisplayName("Pre-scheduled future banners (startDate > now) do not consume the live concurrency limit of 15")
+    void testLiveConcurrencyCap_FutureBannersDoNotBlockImmediateNews() {
+        LocalDateTime now = LocalDateTime.now();
+
+        // Schedule 15 banners in the future (next week)
+        for (int i = 1; i <= 15; i++) {
+            bannerService.createBanner(CreateBannerRequest.builder()
+                    .title("Future Scheduled Banner " + i)
+                    .startDate(now.plusDays(7))
+                    .expiryDate(now.plusDays(10))
+                    .isActive(true)
+                    .build(), "admin@company.com");
+        }
+
+        // Now create a currently live active banner -> MUST SUCCEED without hitting 15 cap!
+        assertDoesNotThrow(() ->
+                bannerService.createBanner(CreateBannerRequest.builder()
+                        .title("Immediate Active Breaking News")
+                        .startDate(now.minusHours(1))
+                        .expiryDate(now.plusDays(1))
+                        .isActive(true)
+                        .build(), "admin@company.com")
+        );
+    }
+
+    @Test
+    @DisplayName("BannerLifecycleService generates birthday/anniversary banners and avoids duplicates")
+    void testBannerLifecycleService_MilestoneGenerationAndDuplicateGuards() {
+        java.time.LocalDate today = java.time.LocalDate.now();
+
+        // Create birthday employee
+        var empBday = employeeRepository.save(com.example.hr_management_backend.features.employees.model.Employee.builder()
+                .firstName("Alice")
+                .lastName("Smith")
+                .email("alice.test@company.internal")
+                .role("EMPLOYEE")
+                .status("ACTIVE")
+                .dateOfBirth(today.minusYears(28))
+                .joiningDate(today.minusYears(3))
+                .build());
+
+        // Create same-day new hire (0 years completed)
+        var empNewHire = employeeRepository.save(com.example.hr_management_backend.features.employees.model.Employee.builder()
+                .firstName("Bob")
+                .lastName("Newbie")
+                .email("bob.newbie@company.internal")
+                .role("EMPLOYEE")
+                .status("ACTIVE")
+                .dateOfBirth(today.minusYears(22).plusMonths(2)) // DOB not today
+                .joiningDate(today) // Joining TODAY -> 0 years!
+                .build());
+
+        // Generate milestones
+        bannerLifecycleService.generateMilestonesForDate(today);
+
+        // Verify Alice received birthday banner and anniversary banner
+        List<BannerDto> activeBanners = bannerService.getActiveBanners(null, null);
+        assertTrue(activeBanners.stream().anyMatch(b -> b.getTitle().contains("Happy Birthday, Alice!")));
+        assertTrue(activeBanners.stream().anyMatch(b -> b.getTitle().contains("Work Anniversary, Alice!")));
+
+        // Verify Bob (0-year hire) DID NOT receive a 0th anniversary banner
+        assertFalse(activeBanners.stream().anyMatch(b -> b.getTitle().contains("Bob")));
+
+        // Run lifecycle again -> duplicate guard should prevent duplicates
+        int countBefore = bannerRepository.findAll().size();
+        bannerLifecycleService.generateMilestonesForDate(today);
+        int countAfter = bannerRepository.findAll().size();
+        assertEquals(countBefore, countAfter);
+    }
+
+    @Test
+    @DisplayName("Relative internal image URLs from upload endpoint are accepted while protocol-relative URLs are rejected")
+    void testCreateBanner_SupportsRelativeInternalImageUrlsAndRejectsProtocolRelativeBypass() {
+        LocalDateTime now = LocalDateTime.now();
+        CreateBannerRequest validRelativeReq = CreateBannerRequest.builder()
+                .title("Internal Image Announcement")
+                .imageUrl("/api/v1/banners/images/1234-uuid_company_news.png")
+                .actionUrl("/engage?tab=news")
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build();
+
+        BannerDto created = bannerService.createBanner(validRelativeReq, "admin@company.com");
+        assertEquals("/api/v1/banners/images/1234-uuid_company_news.png", created.getImageUrl());
+        assertEquals("/engage?tab=news", created.getActionUrl());
+
+        CreateBannerRequest protocolRelativeReq = CreateBannerRequest.builder()
+                .title("Protocol Relative Exploit")
+                .imageUrl("//evil.com/phishing.png")
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () ->
+                bannerService.createBanner(protocolRelativeReq, "admin@company.com")
+        );
+    }
+
+    @Test
+    @DisplayName("Reaction mutations with explicit action (ADD / REMOVE) are strictly idempotent")
+    void testToggleReaction_IdempotentAddAndRemove() {
+        LocalDateTime now = LocalDateTime.now();
+        CreateBannerRequest request = CreateBannerRequest.builder()
+                .title("Social Post for Idempotency")
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build();
+
+        BannerDto banner = bannerService.createBanner(request, "admin@company.com");
+
+        // Action ADD invoked twice
+        var summary1 = bannerService.toggleReaction(banner.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.LIKE, 101L, "ADD");
+        assertEquals(1L, summary1.getReactionCounts().get("LIKE"));
+        assertTrue(summary1.getUserReactions().contains("LIKE"));
+
+        var summary2 = bannerService.toggleReaction(banner.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.LIKE, 101L, "ADD");
+        assertEquals(1L, summary2.getReactionCounts().get("LIKE"));
+        assertTrue(summary2.getUserReactions().contains("LIKE"));
+
+        // Action REMOVE invoked twice
+        var summary3 = bannerService.toggleReaction(banner.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.LIKE, 101L, "REMOVE");
+        assertEquals(0L, summary3.getReactionCounts().get("LIKE"));
+        assertFalse(summary3.getUserReactions().contains("LIKE"));
+
+        var summary4 = bannerService.toggleReaction(banner.getId(), com.example.hr_management_backend.features.banners.model.BannerReactionType.LIKE, 101L, "REMOVE");
+        assertEquals(0L, summary4.getReactionCounts().get("LIKE"));
+        assertFalse(summary4.getUserReactions().contains("LIKE"));
+    }
+
+    @Test
+    @DisplayName("Lifecycle service batch purges expired celebration banners and associated reactions")
+    void testBannerLifecycleService_BatchPurgesExpiredCelebrations() {
+        LocalDateTime now = LocalDateTime.now();
+        java.time.LocalDate today = java.time.LocalDate.now();
+
+        // Expired celebration banner
+        var expiredCeleb = bannerRepository.save(com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("Expired Birthday")
+                .bannerType(com.example.hr_management_backend.features.banners.model.BannerType.CELEBRATION)
+                .celebrationType(com.example.hr_management_backend.features.banners.model.CelebrationType.BIRTHDAY)
+                .category(BannerCategory.BIRTHDAY)
+                .startDate(now.minusDays(5))
+                .expiryDate(now.minusDays(2))
+                .isActive(true)
+                .build());
+
+        bannerReactionRepository.save(com.example.hr_management_backend.features.banners.model.BannerReaction.builder()
+                .bannerId(expiredCeleb.getId())
+                .employeeId(202L)
+                .reactionType(com.example.hr_management_backend.features.banners.model.BannerReactionType.WISH)
+                .createdAt(now.minusDays(3))
+                .build());
+
+        // Live celebration banner (should not be purged)
+        var liveCeleb = bannerRepository.save(com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("Live Birthday")
+                .bannerType(com.example.hr_management_backend.features.banners.model.BannerType.CELEBRATION)
+                .celebrationType(com.example.hr_management_backend.features.banners.model.CelebrationType.BIRTHDAY)
+                .category(BannerCategory.BIRTHDAY)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusHours(12))
+                .isActive(true)
+                .build());
+
+        // Purge expired celebrations
+        bannerLifecycleService.purgeExpiredCelebrations(today);
+
+        assertFalse(bannerRepository.existsById(expiredCeleb.getId()));
+        assertTrue(bannerRepository.existsById(liveCeleb.getId()));
     }
 }

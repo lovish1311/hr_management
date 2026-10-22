@@ -45,6 +45,9 @@ public class BannerControllerTest {
     private BannerRepository bannerRepository;
 
     @Autowired
+    private com.example.hr_management_backend.features.banners.repository.BannerReactionRepository bannerReactionRepository;
+
+    @Autowired
     private com.example.hr_management_backend.features.employees.repository.EmployeeRepository employeeRepository;
 
     @Autowired
@@ -66,7 +69,11 @@ public class BannerControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(bannerController).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(bannerController)
+                .setCustomArgumentResolvers(new org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver())
+                .setControllerAdvice(new com.example.hr_management_backend.core.exception.GlobalExceptionHandler())
+                .build();
+        bannerReactionRepository.deleteAll();
         bannerRepository.deleteAll();
         if (cacheManager.getCache("user_authorities") != null) {
             cacheManager.getCache("user_authorities").clear();
@@ -84,6 +91,7 @@ public class BannerControllerTest {
     private void authenticateAsAdmin() {
         UserPrincipal principal = UserPrincipal.builder()
                 .id(1L)
+                .employeeId(1L)
                 .email("admin@company.com")
                 .role("ADMIN")
                 .authorities(List.of(new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("BANNER_MANAGE")))
@@ -100,6 +108,7 @@ public class BannerControllerTest {
     private void authenticateAsEmployee() {
         UserPrincipal principal = UserPrincipal.builder()
                 .id(2L)
+                .employeeId(2L)
                 .email("employee@company.com")
                 .role("EMPLOYEE")
                 .authorities(List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")))
@@ -366,5 +375,142 @@ public class BannerControllerTest {
         assertTrue(auth2.getAuthorities().stream().anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority())));
         assertFalse(auth2.getAuthorities().stream().anyMatch(a -> "BANNER_MANAGE".equals(a.getAuthority())),
                 "Revoked BANNER_MANAGE authority must not persist from static JWT claims!");
+    }
+
+    @Test
+    @DisplayName("POST /{id}/react toggles emoji reactions and returns authoritative reaction summary")
+    void testToggleReaction_EndpointReturnsAuthoritativeSummary() throws Exception {
+        authenticateAsEmployee();
+        LocalDateTime now = LocalDateTime.now();
+
+        var banner = bannerRepository.save(com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("Reaction Post")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .bannerType(com.example.hr_management_backend.features.banners.model.BannerType.NEWS)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .isActive(true)
+                .displayOrder(0)
+                .build());
+
+        // 1. Add LIKE
+        mockMvc.perform(post("/api/v1/banners/" + banner.getId() + "/react")
+                        .param("reactionType", "LIKE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bannerId").value(banner.getId()))
+                .andExpect(jsonPath("$.reactionCounts.LIKE").value(1))
+                .andExpect(jsonPath("$.userReactions[0]").value("LIKE"))
+                .andExpect(jsonPath("$.totalReactions").value(1));
+
+        // 2. Toggle off LIKE
+        mockMvc.perform(post("/api/v1/banners/" + banner.getId() + "/react")
+                        .param("reactionType", "LIKE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactionCounts.LIKE").value(0))
+                .andExpect(jsonPath("$.totalReactions").value(0));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/banners/engage returns filtered news or celebration feeds")
+    void testEngageFeed_EndpointReturnsFilteredResults() throws Exception {
+        authenticateAsEmployee();
+        LocalDateTime now = LocalDateTime.now();
+
+        bannerRepository.save(com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("Company Hackathon 2026")
+                .category(BannerCategory.OFFICE_EVENT)
+                .bannerType(com.example.hr_management_backend.features.banners.model.BannerType.NEWS)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .isActive(true)
+                .displayOrder(0)
+                .build());
+
+        mockMvc.perform(get("/api/v1/banners/engage")
+                        .param("tab", "NEWS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].title").value("Company Hackathon 2026"))
+                .andExpect(jsonPath("$[0].bannerType").value("NEWS"));
+    }
+
+    @Test
+    @DisplayName("POST /upload-image validates magic bytes and stores image; GET /images/{filename} serves image publicly")
+    void testUploadAndServeBannerImage() throws Exception {
+        authenticateAsAdmin();
+
+        // Valid PNG header (89 50 4E 47 0D 0A 1A 0A) followed by padding
+        byte[] validPngBytes = new byte[]{(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0, 0, 0};
+        org.springframework.mock.web.MockMultipartFile validFile =
+                new org.springframework.mock.web.MockMultipartFile("file", "banner_test.png", "image/png", validPngBytes);
+
+        String responseJson = mockMvc.perform(multipart("/api/v1/banners/upload-image").file(validFile))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.filename").isNotEmpty())
+                .andExpect(jsonPath("$.imageUrl").value(containsString("/api/v1/banners/images/")))
+                .andReturn().getResponse().getContentAsString();
+
+        String filename = objectMapper.readTree(responseJson).get("filename").asText();
+
+        // Public retrieval test (works without authentication)
+        SecurityContextHolder.clearContext();
+        mockMvc.perform(get("/api/v1/banners/images/" + filename))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("public, max-age=")))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("Content-Disposition", containsString("inline; filename=")))
+                .andExpect(content().contentType(MediaType.IMAGE_PNG));
+    }
+
+    @Test
+    @DisplayName("POST /upload-image rejects invalid binary files that fail magic byte verification")
+    void testUploadBannerImage_RejectsInvalidFiles() throws Exception {
+        authenticateAsAdmin();
+
+        // Invalid fake image (text disguised as jpg)
+        org.springframework.mock.web.MockMultipartFile invalidFile =
+                new org.springframework.mock.web.MockMultipartFile("file", "exploit.jpg", "image/jpeg", "not a real image".getBytes());
+
+        mockMvc.perform(multipart("/api/v1/banners/upload-image").file(invalidFile))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /{id}/react supports explicit action (ADD / REMOVE) for network idempotency")
+    void testToggleReaction_ExplicitActionParam() throws Exception {
+        authenticateAsEmployee();
+
+        LocalDateTime now = LocalDateTime.now();
+        var banner = bannerRepository.save(com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("Reactions Post")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .isActive(true)
+                .build());
+
+        // ADD
+        mockMvc.perform(post("/api/v1/banners/" + banner.getId() + "/react")
+                        .param("reactionType", "LOVE")
+                        .param("action", "ADD"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactionCounts.LOVE").value(1))
+                .andExpect(jsonPath("$.userReactions", hasItem("LOVE")));
+
+        // ADD again (idempotent)
+        mockMvc.perform(post("/api/v1/banners/" + banner.getId() + "/react")
+                        .param("reactionType", "LOVE")
+                        .param("action", "ADD"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactionCounts.LOVE").value(1))
+                .andExpect(jsonPath("$.userReactions", hasItem("LOVE")));
+
+        // REMOVE
+        mockMvc.perform(post("/api/v1/banners/" + banner.getId() + "/react")
+                        .param("reactionType", "LOVE")
+                        .param("action", "REMOVE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reactionCounts.LOVE").value(0))
+                .andExpect(jsonPath("$.userReactions", not(hasItem("LOVE"))));
     }
 }

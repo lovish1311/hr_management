@@ -24,8 +24,13 @@ public class UpdateBannerRequest {
     @Size(max = 255, message = "Subtitle cannot exceed 255 characters")
     private String subtitle;
 
-    @NotNull(message = "Category is required")
     private BannerCategory category;
+
+    private com.example.hr_management_backend.features.banners.model.BannerType bannerType;
+
+    private com.example.hr_management_backend.features.banners.model.CelebrationType celebrationType;
+
+    private Long targetEmployeeId;
 
     @Size(max = 500, message = "Image URL cannot exceed 500 characters")
     private String imageUrl;

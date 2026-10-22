@@ -40,6 +40,8 @@ build/
 !.env.example
 application-local.properties
 application-local.yml
+firebase-service-account*.json
+*service-account*.json
 
 # Documentation and Chat Archives (Stored centrally in workspace docs/)
 /docs/
@@ -48,3 +50,5 @@ application-local.yml
 test_edge_e2e_suite.py
 hs_err_pid*.log
 replay_pid*.log
+/uploads/
+
