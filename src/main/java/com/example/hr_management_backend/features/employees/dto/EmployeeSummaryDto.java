@@ -18,8 +18,10 @@ public class EmployeeSummaryDto {
     private String department;
     private String designation;
     private String role;
+    private String roleFormatted;
     private String systemRole;
     private String status;
+    private String statusFormatted;
     private String phoneNumber;
     private java.time.LocalDate joiningDate;
     private Boolean isAttendanceTracked;
@@ -29,6 +31,7 @@ public class EmployeeSummaryDto {
     private Long managerId;
     private String managerName;
     private String todayAttendanceStatus; // e.g. PRESENT, LATE, ABSENT, ON_LEAVE, EXEMPT
+    private String todayAttendanceStatusFormatted;
     private Integer leaveBalance;
     @Builder.Default
     private java.util.List<String> authorities = new java.util.ArrayList<>();

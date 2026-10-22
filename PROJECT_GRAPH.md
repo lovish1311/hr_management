@@ -3,8 +3,8 @@
 This graph catalogs all project nodes, domains, architectural layers, database entities, controllers, and inter-feature dependencies.
 **Rule Compliance**: Whenever a new file, directory, or feature is added or modified, update this graph.
 
-- **Total Nodes**: 230
-- **Total Edges**: 413
+- **Total Nodes**: 232
+- **Total Edges**: 418
 - **Features / Modules**: attendance, auth, core, dashboard, email, employees, games, holidays, leaves, payroll, performance, recruitment, scribbil, settings, tambola
 
 ---
@@ -62,7 +62,7 @@ Total Components: 22
 ---
 
 ## Module / Domain Node: `CORE`
-Total Components: 20
+Total Components: 22
 
 | Node ID / Class | Layer | Path | Table / Endpoint | Dependencies |
 |---|---|---|---|---|
@@ -86,6 +86,8 @@ Total Components: 20
 | <a id="node-resourcenotfoundexception"></a>`ResourceNotFoundException` | `exception` | [`src/main/java/com/example/hr_management_backend/core/exception/ResourceNotFoundException.java`](src/main/java/com/example/hr_management_backend/core/exception/ResourceNotFoundException.java) |  |  |
 | <a id="node-securityconfig"></a>`SecurityConfig` | `security` | [`src/main/java/com/example/hr_management_backend/core/security/SecurityConfig.java`](src/main/java/com/example/hr_management_backend/core/security/SecurityConfig.java) |  |  |
 | <a id="node-servletinitializer"></a>`ServletInitializer` | `other` | [`src/main/java/com/example/hr_management_backend/ServletInitializer.java`](src/main/java/com/example/hr_management_backend/ServletInitializer.java) |  |  |
+| <a id="node-textformatter"></a>`TextFormatter` | `util` | [`src/main/java/com/example/hr_management_backend/core/utils/TextFormatter.java`](src/main/java/com/example/hr_management_backend/core/utils/TextFormatter.java) | Memoized $O(1)$ Presentation Sanitizer |  |
+| <a id="node-textformattertest"></a>`TextFormatterTest` | `test` | [`src/test/java/com/example/hr_management_backend/core/utils/TextFormatterTest.java`](src/test/java/com/example/hr_management_backend/core/utils/TextFormatterTest.java) | Unit Test | [TextFormatter](#node-textformatter) |
 
 ---
 

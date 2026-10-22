@@ -20,11 +20,13 @@ public class EmployeeDetailDto {
     private String department;
     private String designation;
     private String role;
+    private String roleFormatted;
     private String systemRole;
     private LocalDate joiningDate;
     private LocalDate relievingDate;
     private String employmentType;
     private String status;
+    private String statusFormatted;
     private String phoneNumber;
     private LocalDate dateOfBirth;
     private String gender;
@@ -39,10 +41,12 @@ public class EmployeeDetailDto {
     private Long managerId;
     private String managerName;
     private String todayAttendanceStatus; // e.g. PRESENT, LATE, ABSENT, ON_LEAVE, EXEMPT
+    private String todayAttendanceStatusFormatted;
     private Integer leaveBalance;
     private Boolean hasTambolaAccess;
     private Boolean isActivated;
     private String accountStatus;
+    private String accountStatusFormatted;
     @Builder.Default
     private java.util.List<String> authorities = new java.util.ArrayList<>();
 }

@@ -14,6 +14,7 @@ import com.example.hr_management_backend.features.leaves.repository.LeaveRequest
 import com.example.hr_management_backend.features.attendance.model.Attendance;
 import com.example.hr_management_backend.features.attendance.repository.AttendanceRepository;
 import com.example.hr_management_backend.features.settings.service.SettingsService;
+import com.example.hr_management_backend.core.utils.TextFormatter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -677,12 +678,14 @@ public class LeaveService {
                 .startDate(req.getStartDate())
                 .endDate(req.getEndDate())
                 .leaveType(req.getLeaveType())
+                .leaveTypeFormatted(TextFormatter.formatLeaveType(req.getLeaveType()))
                 .totalDays(req.getTotalDays())
                 .isTimeBased(req.getIsTimeBased())
                 .startSession(req.getStartSession())
                 .endSession(req.getEndSession())
                 .reason(req.getReason())
                 .status(req.getStatus())
+                .statusFormatted(TextFormatter.formatStatus(req.getStatus()))
                 .rejectionReason(req.getRejectionReason())
                 .approvedBy(req.getApprovedBy())
                 .approverName(approverName)

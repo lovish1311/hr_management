@@ -240,4 +240,43 @@ public class AttendanceServiceTest {
             attendanceRepository.saveAndFlush(new Attendance(null, testEmployee.getId(), date, LocalTime.of(10, 0), LocalTime.of(19, 0), "LATE"));
         });
     }
+
+    @Test
+    @DisplayName("Test 11: Mid-Month Hire Pre-Joining Days Marked PRE_JOINING Without LOP / Unexcused Absences")
+    void testPreJoiningDaysAreNotMarkedAsLopOrAbsent() {
+        LocalDate joiningDate = LocalDate.of(2026, 10, 15);
+        Employee midMonthEmployee = employeeRepository.save(Employee.builder()
+                .firstName("Aarav")
+                .lastName("Mehta")
+                .email("aarav.joining." + UUID.randomUUID() + "@company.com")
+                .employeeCode("EMP-JOIN-01")
+                .department("Engineering")
+                .designation("DevOps Engineer")
+                .role("EMPLOYEE")
+                .isAttendanceTracked(true)
+                .joiningDate(joiningDate)
+                .build());
+
+        List<AttendanceCalendarDayDto> calendar = attendanceService.getMonthlyCalendarSummary(midMonthEmployee.getId(), 2026, 10);
+        assertNotNull(calendar);
+        assertEquals(31, calendar.size());
+
+        // Days 1 through 14 must be PRE_JOINING, NOT UNEXCUSED_ABSENT or LOP_LEAVE
+        for (int day = 1; day <= 14; day++) {
+            LocalDate d = LocalDate.of(2026, 10, day);
+            AttendanceCalendarDayDto dayDto = calendar.stream()
+                    .filter(c -> c.getDate().equals(d))
+                    .findFirst()
+                    .orElseThrow();
+            assertEquals("PRE_JOINING", dayDto.getStatus(), "Day " + day + " prior to joining date must be PRE_JOINING");
+            assertEquals("Pre-Joining", dayDto.getStatusLabel());
+        }
+
+        // On or after joining date (Oct 15), if no punch and in past, it is not PRE_JOINING
+        AttendanceCalendarDayDto joinDayDto = calendar.stream()
+                .filter(c -> c.getDate().equals(joiningDate))
+                .findFirst()
+                .orElseThrow();
+        assertNotEquals("PRE_JOINING", joinDayDto.getStatus(), "Joining date must not be PRE_JOINING");
+    }
 }

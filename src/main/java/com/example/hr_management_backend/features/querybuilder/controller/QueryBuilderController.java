@@ -52,9 +52,9 @@ public class QueryBuilderController {
 
     @PostMapping("/export")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'ADMIN', 'HR', 'MANAGER') or hasAuthority('PAYROLL_MANAGE')")
-    public ResponseEntity<byte[]> exportQuery(
+    public ResponseEntity<StreamingResponseBody> exportQuery(
             @RequestBody QueryRequestDto request,
-            @RequestParam(defaultValue = "XLSX") String format) throws Exception {
+            @RequestParam(defaultValue = "XLSX") String format) {
 
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         boolean isCsv = "CSV".equalsIgnoreCase(format);
@@ -65,15 +65,19 @@ public class QueryBuilderController {
                 ? MediaType.parseMediaType("text/csv; charset=UTF-8")
                 : MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 
-        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-        executionService.streamExport(request, format, baos);
-        byte[] bytes = baos.toByteArray();
+        StreamingResponseBody stream = outputStream -> {
+            try {
+                executionService.streamExport(request, format, outputStream);
+            } catch (Exception e) {
+                log.error("Streaming report export failed: {}", e.getMessage(), e);
+                throw new RuntimeException("Report export failed", e);
+            }
+        };
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .contentType(mediaType)
-                .contentLength(bytes.length)
-                .body(bytes);
+                .body(stream);
     }
 
     // --- Template Management Endpoints ---

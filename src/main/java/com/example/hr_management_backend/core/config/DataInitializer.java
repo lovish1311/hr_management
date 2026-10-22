@@ -50,9 +50,11 @@ public class DataInitializer implements CommandLineRunner {
             Employee hrEmployee = createEmployee("Aadisha", "Dhullar", "hr@company.com", "Human Resources", "HR Lead", "HR", "EMP-002", "Aadisha Dhullar", null, false, "+91 98123 00002", "1994-06-18", "Female", "Sector 17, Chandigarh");
             createUser("hr@company.com", "hr123", "ROLE_HR", "NONE", hrEmployee.getId());
 
-            // 3. Managers (isAttendanceTracked = false)
-            Employee harshManager = createEmployee("Harsh", "Kaushal", "harsh.kaushal@company.com", "Engineering", "Engineering Lead", "MANAGER", "EMP-101", "Harsh Kaushal", null, false, "+91 98123 00101", "1989-03-25", "Male", "Phase 8, Mohali");
-            createUser("harsh.kaushal@company.com", "manager123", "ROLE_MANAGER", "NONE", harshManager.getId());
+            // 3. Operational Administrator & Engineering Lead: Harsh Kaushal (ADMIN systemRole + ROLE_ADMIN)
+            Employee harshManager = createEmployee("Harsh", "Kaushal", "harsh.kaushal@company.com", "Engineering", "Engineering Lead", "ADMIN", "EMP-101", "Harsh Kaushal", null, false, "+91 98123 00101", "1989-03-25", "Male", "Phase 8, Mohali");
+            harshManager.setSystemRole("ADMIN");
+            harshManager = employeeRepository.save(harshManager);
+            createUser("harsh.kaushal@company.com", "manager123", "ROLE_ADMIN", "ADMIN", harshManager.getId());
 
             Employee naveenManager = createEmployee("Naveen Chandra", "Tiwari", "naveen.tiwari@company.com", "Product", "Product Manager", "MANAGER", "EMP-102", "Naveen Chandra Tiwari", null, false, "+91 98123 00102", "1988-11-12", "Male", "IT Park, Chandigarh");
             createUser("naveen.tiwari@company.com", "manager123", "ROLE_MANAGER", "NONE", naveenManager.getId());
@@ -64,11 +66,11 @@ public class DataInitializer implements CommandLineRunner {
             // Engineering Team (Harsh Kaushal)
             Employee ishu = createEmployee("Ishu", "Saini", "ishu.saini@company.com", "Engineering", "Senior Software Developer", "EMPLOYEE", "EMP-201", "ishu Saini", harshManager, true, "+91 98123 45201", "1997-04-12", "Male", "Sector 34, Chandigarh");
             Employee lovish = createEmployee("Lovish", "Kumar", "lovish@company.com", "Engineering", "Senior Software Developer", "EMPLOYEE", "EMP-202", "Lovish", harshManager, true, "+91 98123 45202", "1996-08-19", "Male", "Phase 7, Mohali");
-            Employee abhishekG = createEmployee("Abhishek", "Gaur", "abhishek.g@company.com", "Engineering", "Frontend Developer", "EMPLOYEE", "EMP-203", "AbhishekG", harshManager, true, "+91 98123 45203", "1998-02-14", "Male", "Sector 22, Chandigarh");
+            Employee abhishekG = createEmployee("Abhishek", "Gaur", "abhishek.g@company.com", "Engineering", "Frontend Developer", "EMPLOYEE", "NOTICE_PERIOD", "EMP-203", "AbhishekG", harshManager, true, "+91 98123 45203", "1998-02-14", "Male", "Sector 22, Chandigarh");
             Employee abhinav = createEmployee("Abhinav", "Singh", "abhinav@company.com", "Engineering", "Backend Developer", "EMPLOYEE", "EMP-204", "Abhinav", harshManager, true, "+91 98123 45204", "1997-11-05", "Male", "Zirakpur, Punjab");
             Employee gurkirat = createEmployee("Gurkirat", "Singh", "gurkirat@company.com", "Engineering", "Tech Lead", "EMPLOYEE", "EMP-205", "Gurkirat", harshManager, true, "+91 98123 45205", "1995-09-30", "Male", "Phase 3B2, Mohali");
             Employee ashish = createEmployee("Ashish", "Chauhan", "ashish@company.com", "Engineering", "QA Engineer", "EMPLOYEE", "EMP-206", "Ashish Chauhan", harshManager, true, "+91 98123 45206", "1999-01-22", "Male", "Sector 70, Mohali");
-            Employee aniket = createEmployee("Aniket", "Sharma", "aniket@company.com", "Engineering", "Software Engineer", "EMPLOYEE", "EMP-208", "Aniket Sharma", harshManager, true, "+91 98123 45208", "1998-10-18", "Male", "Sector 11, Panchkula");
+            Employee aniket = createEmployee("Aniket", "Sharma", "aniket@company.com", "Engineering", "Software Engineer", "EMPLOYEE", "PROBATION", "EMP-208", "Aniket Sharma", harshManager, true, "+91 98123 45208", "1998-10-18", "Male", "Sector 11, Panchkula");
             Employee himanshu = createEmployee("Himanshu", "Rana", "himanshu.rana@company.com", "Engineering", "DevOps Engineer", "EMPLOYEE", "EMP-229", "Himanshu Rana", harshManager, true, "+91 98123 45229", "1996-05-14", "Male", "Phase 7, Mohali");
 
             // Product & Operations Team (Naveen Chandra Tiwari)
@@ -136,7 +138,7 @@ public class DataInitializer implements CommandLineRunner {
             log.info("Database successfully seeded with Aadisha Dhullar (HR), 3 Managers, all 29 Excel employees, Admin demo records, and 6-month Payroll history!");
     }
 
-    private Employee createEmployee(String firstName, String lastName, String email, String dept, String designation, String role, String code, String biometricName, Employee manager, boolean isAttendanceTracked, String phone, String dob, String gender, String address) {
+    private Employee createEmployee(String firstName, String lastName, String email, String dept, String designation, String role, String status, String code, String biometricName, Employee manager, boolean isAttendanceTracked, String phone, String dob, String gender, String address) {
         Employee existing = employeeRepository.findByEmployeeCode(code)
                 .orElseGet(() -> employeeRepository.findByEmail(email).orElse(null));
 
@@ -149,7 +151,16 @@ public class DataInitializer implements CommandLineRunner {
             existing.setDepartment(dept);
             existing.setDesignation(designation);
             existing.setRole(role);
-            if (existing.getSystemRole() == null || "NONE".equals(existing.getSystemRole())) {
+            if (status != null && !status.isBlank()) {
+                existing.setStatus(status);
+                if ("NOTICE_PERIOD".equalsIgnoreCase(status) && existing.getRelievingDate() == null) {
+                    existing.setRelievingDate(LocalDate.now().plusDays(30));
+                }
+            }
+            if ("harsh.kaushal@company.com".equalsIgnoreCase(email)) {
+                existing.setRole("ADMIN");
+                existing.setSystemRole("ADMIN");
+            } else if (existing.getSystemRole() == null || "NONE".equals(existing.getSystemRole())) {
                 existing.setSystemRole("SUPER_ADMIN".equalsIgnoreCase(role) ? "SUPER_ADMIN" : "NONE");
             }
             existing.setBiometricName(biometricName != null ? biometricName : (firstName + " " + lastName));
@@ -176,7 +187,8 @@ public class DataInitializer implements CommandLineRunner {
                 .biometricName(biometricName != null ? biometricName : (firstName + " " + lastName))
                 .joiningDate(LocalDate.of(2024, 1, 15))
                 .employmentType("FULL_TIME")
-                .status("ACTIVE")
+                .status(status != null && !status.isBlank() ? status : "ACTIVE")
+                .relievingDate("NOTICE_PERIOD".equalsIgnoreCase(status) ? LocalDate.now().plusDays(30) : null)
                 .phoneNumber(phone)
                 .dateOfBirth(dateOfBirth)
                 .gender(gender)
@@ -187,6 +199,10 @@ public class DataInitializer implements CommandLineRunner {
                 .manager(manager)
                 .build();
         return employeeRepository.save(emp);
+    }
+
+    private Employee createEmployee(String firstName, String lastName, String email, String dept, String designation, String role, String code, String biometricName, Employee manager, boolean isAttendanceTracked, String phone, String dob, String gender, String address) {
+        return createEmployee(firstName, lastName, email, dept, designation, role, "ACTIVE", code, biometricName, manager, isAttendanceTracked, phone, dob, gender, address);
     }
 
     private void createUser(String email, String password, String role, Long employeeId) {
@@ -200,12 +216,8 @@ public class DataInitializer implements CommandLineRunner {
         user.setRole(role);
         user.setSystemRole(systemRole != null ? systemRole : "NONE");
         user.setEmployeeId(employeeId);
-        if (user.getIsActivated() == null) {
-            user.setIsActivated(true);
-        }
-        if (user.getAccountStatus() == null || user.getAccountStatus().isBlank()) {
-            user.setAccountStatus("ACTIVE");
-        }
+        user.setIsActivated(true);
+        user.setAccountStatus("ACTIVE");
         userRepository.save(user);
     }
 
@@ -286,6 +298,26 @@ public class DataInitializer implements CommandLineRunner {
                 .build();
 
         leaveRequestRepository.saveAll(List.of(casualLeave, sickLeave, shortBreak1, shortBreak2));
+
+        // Ensure an actionable pending leave request exists for Lovish for manager/co-approver adjudication testing
+        boolean hasPending = leaveRequestRepository.findAllPendingOrCancelRequested().stream()
+                .anyMatch(r -> r.getEmployeeId().equals(empId));
+        if (!hasPending) {
+            LeaveRequest pendingLeave = LeaveRequest.builder()
+                    .employeeId(empId)
+                    .startDate(LocalDate.now().plusDays(5))
+                    .endDate(LocalDate.now().plusDays(6))
+                    .leaveType("CASUAL")
+                    .totalDays(2.0)
+                    .isTimeBased(false)
+                    .status("PENDING")
+                    .reason("Attending family wedding ceremony")
+                    .approvedBy(lovish.getManager() != null ? lovish.getManager().getId() : null)
+                    .createdAt(java.time.LocalDateTime.now())
+                    .build();
+            leaveRequestRepository.save(pendingLeave);
+            log.info("Seeded pending leave request for Lovish (empId={}) to test manager/co-approver adjudication.", empId);
+        }
 
         // 3. Clean and Seed Attendance Records for all working days up to Sep 28, 2026
         List<Attendance> existingAtt = attendanceRepository.findByEmployeeIdAndDateBetween(

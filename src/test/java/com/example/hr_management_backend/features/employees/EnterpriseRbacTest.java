@@ -68,12 +68,19 @@ public class EnterpriseRbacTest {
                         .build())
         );
 
-        userRepository.findByEmail("rbac1@company.com").orElseGet(() ->
-                userRepository.save(User.builder()
+        userRepository.findByEmail("rbac1@company.com").ifPresentOrElse(
+                u -> {
+                    u.setIsActivated(true);
+                    u.setAccountStatus("ACTIVE");
+                    userRepository.save(u);
+                },
+                () -> userRepository.save(User.builder()
                         .email("rbac1@company.com")
                         .password("pass123")
                         .role("ROLE_EMPLOYEE")
                         .employeeId(employee1.getId())
+                        .isActivated(true)
+                        .accountStatus("ACTIVE")
                         .build())
         );
 
@@ -87,12 +94,19 @@ public class EnterpriseRbacTest {
                         .build())
         );
 
-        userRepository.findByEmail("rbac2@company.com").orElseGet(() ->
-                userRepository.save(User.builder()
+        userRepository.findByEmail("rbac2@company.com").ifPresentOrElse(
+                u -> {
+                    u.setIsActivated(true);
+                    u.setAccountStatus("ACTIVE");
+                    userRepository.save(u);
+                },
+                () -> userRepository.save(User.builder()
                         .email("rbac2@company.com")
                         .password("pass123")
                         .role("ROLE_EMPLOYEE")
                         .employeeId(employee2.getId())
+                        .isActivated(true)
+                        .accountStatus("ACTIVE")
                         .build())
         );
     }

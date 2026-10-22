@@ -363,6 +363,8 @@ public class AttendanceService {
         Optional<Employee> empOpt = employeeRepository.findById(employeeId);
         LocalTime customLateCutoff = empOpt.map(Employee::getLateArrivalAllowedUntil).orElse(null);
         LocalTime defaultLateCutoff = customLateCutoff != null ? customLateCutoff : getUniversalLateCutoff();
+        LocalDate joiningDate = empOpt.map(Employee::getJoiningDate).orElse(null);
+        LocalDate relievingDate = empOpt.map(Employee::getRelievingDate).orElse(null);
 
         // Fetch attendance for the month
         Map<LocalDate, Attendance> attendanceMap = attendanceRepository
@@ -416,7 +418,13 @@ public class AttendanceService {
             LocalTime checkIn = attendance != null ? attendance.getCheckInTime() : null;
             LocalTime checkOut = attendance != null ? attendance.getCheckOutTime() : null;
 
-            if (isWeekend) {
+            if (joiningDate != null && current.isBefore(joiningDate) && checkIn == null) {
+                status = "PRE_JOINING";
+                statusLabel = "Pre-Joining";
+            } else if (relievingDate != null && current.isAfter(relievingDate) && checkIn == null) {
+                status = "RELIEVED";
+                statusLabel = "Relieved";
+            } else if (isWeekend) {
                 status = "WEEKEND";
                 statusLabel = "Weekend";
             } else if (isHoliday) {

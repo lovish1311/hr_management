@@ -24,12 +24,14 @@ public class LeaveRequestDto {
     private LocalDate startDate;
     private LocalDate endDate;
     private String leaveType;
+    private String leaveTypeFormatted;
     private Double totalDays;
     private Boolean isTimeBased;
     private String startSession;
     private String endSession;
     private String reason;
     private String status;
+    private String statusFormatted;
     private String rejectionReason;
     private Long approvedBy;
     private String approverName;

@@ -1,6 +1,7 @@
 package com.example.hr_management_backend.features.employees.service;
 
 import com.example.hr_management_backend.core.exception.ResourceNotFoundException;
+import com.example.hr_management_backend.core.utils.TextFormatter;
 import com.example.hr_management_backend.features.auth.model.User;
 import com.example.hr_management_backend.features.employees.dto.EmployeeDetailDto;
 import com.example.hr_management_backend.features.employees.dto.EmployeeSummaryDto;
@@ -109,6 +110,9 @@ public class EmployeeServiceImpl implements EmployeeService {
         if (employee.getEmployeeCode() == null || employee.getEmployeeCode().isBlank()) {
             Long nextSeq = employeeRepository.getNextEmployeeCodeSequence();
             employee.setEmployeeCode("EMP-" + nextSeq);
+        }
+        if (employee.getJoiningDate() == null) {
+            employee.setJoiningDate(LocalDate.now());
         }
         Employee saved = employeeRepository.save(employee);
 
@@ -406,6 +410,7 @@ public class EmployeeServiceImpl implements EmployeeService {
             managerName = employee.getManager().getFirstName() + " " + employee.getManager().getLastName();
         }
 
+        String todayStatus = computeTodayStatus(employee);
         return EmployeeSummaryDto.builder()
                 .id(employee.getId())
                 .employeeCode(employee.getEmployeeCode())
@@ -415,8 +420,10 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .department(employee.getDepartment())
                 .designation(employee.getDesignation())
                 .role(employee.getRole())
+                .roleFormatted(TextFormatter.formatRole(employee.getRole()))
                 .systemRole(employee.getSystemRole())
                 .status(employee.getStatus())
+                .statusFormatted(TextFormatter.formatStatus(employee.getStatus()))
                 .phoneNumber(employee.getPhoneNumber())
                 .joiningDate(employee.getJoiningDate())
                 .isAttendanceTracked(employee.getIsAttendanceTracked() != null ? employee.getIsAttendanceTracked() : true)
@@ -425,7 +432,8 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .earlyOutAllowedAfter(employee.getEarlyOutAllowedAfter())
                 .managerId(managerId)
                 .managerName(managerName)
-                .todayAttendanceStatus(computeTodayStatus(employee))
+                .todayAttendanceStatus(todayStatus)
+                .todayAttendanceStatusFormatted(TextFormatter.formatStatus(todayStatus))
                 .leaveBalance(computeLeaveBalance(employee.getId()))
                 .authorities(authorities != null ? authorities : java.util.Collections.emptyList())
                 .build();
@@ -605,11 +613,13 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .department(employee.getDepartment())
                 .designation(employee.getDesignation())
                 .role(employee.getRole())
+                .roleFormatted(TextFormatter.formatRole(employee.getRole()))
                 .systemRole(employee.getSystemRole())
                 .joiningDate(employee.getJoiningDate())
                 .relievingDate(employee.getRelievingDate())
                 .employmentType(employee.getEmploymentType())
                 .status(employee.getStatus())
+                .statusFormatted(TextFormatter.formatStatus(employee.getStatus()))
                 .phoneNumber(employee.getPhoneNumber())
                 .dateOfBirth(employee.getDateOfBirth())
                 .gender(employee.getGender())
@@ -624,10 +634,12 @@ public class EmployeeServiceImpl implements EmployeeService {
                 .managerId(managerId)
                 .managerName(managerName)
                 .todayAttendanceStatus(todayStatus)
+                .todayAttendanceStatusFormatted(TextFormatter.formatStatus(todayStatus))
                 .leaveBalance(leaveBalance)
                 .hasTambolaAccess(Boolean.TRUE.equals(employee.getHasTambolaAccess()))
                 .isActivated(isActivated)
                 .accountStatus(accountStatus)
+                .accountStatusFormatted(TextFormatter.formatStatus(accountStatus))
                 .authorities(authorities)
                 .build();
     }

@@ -16,8 +16,12 @@ public class LoginResponse {
     private Long id;
     private String email;
     private String role;
+    private String roleFormatted;
     private String systemRole;
+    private String systemRoleFormatted;
     private Long employeeId;
+    private String designation;
+    private String department;
     @Builder.Default
     private java.util.List<String> authorities = new java.util.ArrayList<>();
 

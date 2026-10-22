@@ -143,11 +143,15 @@ class QueryCompilerTest {
 
         String sql = compiled.getSelectSql();
         assertTrue(sql.contains("e.joining_date BETWEEN :p_1 AND :p_2"));
-        assertTrue(sql.contains("e.department IN (:p_3)"));
+        assertTrue(sql.contains("LOWER(e.department::text) IN (:p_3)"));
 
         Object inParam = compiled.getParameters().getValue("p_3");
         assertTrue(inParam instanceof List);
-        assertEquals(3, ((List<?>) inParam).size());
+        List<?> inList = (List<?>) inParam;
+        assertEquals(3, inList.size());
+        assertEquals("engineering", inList.get(0));
+        assertEquals("sales", inList.get(1));
+        assertEquals("hr", inList.get(2));
     }
 
     @Test
@@ -165,5 +169,20 @@ class QueryCompilerTest {
         assertTrue(compiled.getSelectSql().contains("FROM attendance a JOIN employees e ON a.employee_id = e.id"));
         assertEquals(50, compiled.getParameters().getValue("limit"));
         assertEquals(50, compiled.getParameters().getValue("offset"));
+    }
+
+    @Test
+    @DisplayName("Should cap pageSize at 500 and fallback on negative page")
+    void testPageSizeCapAndNegativeBounds() {
+        QueryRequestDto req = QueryRequestDto.builder()
+                .rootEntity("EMPLOYEE")
+                .page(-2)
+                .pageSize(10000)
+                .build();
+
+        QueryCompiler.CompiledQuery compiled = compiler.compile(req);
+
+        assertEquals(500, compiled.getParameters().getValue("limit"));
+        assertEquals(0, compiled.getParameters().getValue("offset"));
     }
 }

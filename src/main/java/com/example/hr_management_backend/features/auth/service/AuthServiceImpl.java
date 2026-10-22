@@ -1,6 +1,7 @@
 package com.example.hr_management_backend.features.auth.service;
 
 import com.example.hr_management_backend.core.security.JwtUtils;
+import com.example.hr_management_backend.core.utils.TextFormatter;
 import com.example.hr_management_backend.features.auth.dto.LoginRequest;
 import com.example.hr_management_backend.features.auth.dto.LoginResponse;
 import com.example.hr_management_backend.features.auth.dto.RegisterRequest;
@@ -104,14 +105,28 @@ public class AuthServiceImpl implements AuthService {
             }
         }
 
+        String designation = null;
+        String department = null;
+        if (employeeId != null) {
+            var empOpt = employeeRepository.findById(employeeId);
+            if (empOpt.isPresent()) {
+                designation = empOpt.get().getDesignation();
+                department = empOpt.get().getDepartment();
+            }
+        }
+
         return LoginResponse.builder()
                 .token(jwt)
                 .type("Bearer")
                 .id(userId)
                 .email(userEmail)
                 .role(userRole)
+                .roleFormatted(TextFormatter.formatRole(userRole))
                 .systemRole(systemRole != null ? systemRole : "NONE")
+                .systemRoleFormatted(TextFormatter.formatRole(systemRole != null ? systemRole : "NONE"))
                 .employeeId(employeeId)
+                .designation(designation)
+                .department(department)
                 .authorities(authorityList)
                 .build();
     }

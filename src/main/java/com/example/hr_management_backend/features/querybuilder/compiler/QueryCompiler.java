@@ -133,7 +133,8 @@ public class QueryCompiler {
 
         // 6. Assemble Full Queries
         int page = (request.getPage() != null && request.getPage() >= 0) ? request.getPage() : 0;
-        int pageSize = (request.getPageSize() != null && request.getPageSize() > 0) ? request.getPageSize() : 50;
+        int rawPageSize = (request.getPageSize() != null && request.getPageSize() > 0) ? request.getPageSize() : 50;
+        int pageSize = Math.min(rawPageSize, 500); // Production guard: Cap preview rows at 500 to prevent OOM
 
         String selectSql = String.format("SELECT %s %s %s %s LIMIT :limit OFFSET :offset",
                 selectColsBuilder, fromBuilder, wherePart, sortPart);
@@ -273,11 +274,22 @@ public class QueryCompiler {
                 if (vals.isEmpty()) return null;
                 String pName = "p_" + paramIdx.incrementAndGet();
                 List<Object> typedList = new ArrayList<>();
+                boolean isTextual = "STRING".equals(def.getDataType()) || "ENUM".equals(def.getDataType());
                 for (String v : vals) {
-                    if (!v.isBlank()) typedList.add(bindTypedValue(v, def.getDataType()));
+                    if (!v.isBlank()) {
+                        Object bound = bindTypedValue(v, def.getDataType());
+                        if (isTextual && bound instanceof String) {
+                            typedList.add(((String) bound).toLowerCase().trim());
+                        } else {
+                            typedList.add(bound);
+                        }
+                    }
                 }
                 if (typedList.isEmpty()) return null;
                 params.addValue(pName, typedList);
+                if (isTextual) {
+                    return "LOWER(" + expr + "::text) IN (:" + pName + ")";
+                }
                 return expr + " IN (:" + pName + ")";
             }
             default:
