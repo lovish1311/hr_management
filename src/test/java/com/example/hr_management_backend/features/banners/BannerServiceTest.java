@@ -274,4 +274,137 @@ public class BannerServiceTest {
         assertTrue(toggled.getIsActive());
         assertEquals(1, bannerService.getActiveBanners(null).size());
     }
+
+    @Test
+    @DisplayName("Title containing only HTML tags or script blocks throws IllegalArgumentException instead of DB 500")
+    void testCreateBanner_WithOnlyHtmlTagsInTitle_ThrowsIllegalArgumentException() {
+        LocalDateTime now = LocalDateTime.now();
+        CreateBannerRequest scriptOnly = CreateBannerRequest.builder()
+                .title("<script>evil()</script>")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(1))
+                .build();
+
+        IllegalArgumentException ex1 = assertThrows(IllegalArgumentException.class, () ->
+                bannerService.createBanner(scriptOnly, "admin@company.com")
+        );
+        assertTrue(ex1.getMessage().contains("Banner title cannot be empty or contain only HTML tags"));
+
+        CreateBannerRequest emptyTags = CreateBannerRequest.builder()
+                .title("<h1>   </h1>")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(1))
+                .build();
+
+        IllegalArgumentException ex2 = assertThrows(IllegalArgumentException.class, () ->
+                bannerService.createBanner(emptyTags, "admin@company.com")
+        );
+        assertTrue(ex2.getMessage().contains("Banner title cannot be empty or contain only HTML tags"));
+    }
+
+    @Test
+    @DisplayName("Toggling an inactive banner to active when 15 active banners exist is rejected")
+    void testToggleInactiveBanner_When15ActiveBannersExist_ThrowsIllegalStateException() {
+        LocalDateTime now = LocalDateTime.now();
+        for (int i = 1; i <= 15; i++) {
+            bannerService.createBanner(CreateBannerRequest.builder()
+                    .title("Active Banner " + i)
+                    .category(BannerCategory.ANNOUNCEMENT)
+                    .startDate(now.minusHours(1))
+                    .expiryDate(now.plusDays(2))
+                    .isActive(true)
+                    .build(), "admin@company.com");
+        }
+
+        BannerDto inactiveBanner = bannerService.createBanner(CreateBannerRequest.builder()
+                .title("Inactive Banner 16")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .isActive(false)
+                .build(), "admin@company.com");
+
+        assertThrows(IllegalStateException.class, () ->
+                bannerService.toggleBannerStatus(inactiveBanner.getId(), "admin@company.com")
+        );
+
+        // Also test updateBanner attempting to activate the 16th banner
+        UpdateBannerRequest activateReq = UpdateBannerRequest.builder()
+                .title("Attempt to Activate Banner 16")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .isActive(true)
+                .build();
+
+        assertThrows(IllegalStateException.class, () ->
+                bannerService.updateBanner(inactiveBanner.getId(), activateReq, "admin@company.com")
+        );
+    }
+
+    @Test
+    @DisplayName("Updating an already active banner when 15 active banners exist succeeds without false positive block")
+    void testUpdateAlreadyActiveBanner_When15ActiveBannersExist_Succeeds() {
+        LocalDateTime now = LocalDateTime.now();
+        BannerDto firstBanner = null;
+        for (int i = 1; i <= 15; i++) {
+            BannerDto created = bannerService.createBanner(CreateBannerRequest.builder()
+                    .title("Active Banner " + i)
+                    .category(BannerCategory.ANNOUNCEMENT)
+                    .startDate(now.minusHours(1))
+                    .expiryDate(now.plusDays(2))
+                    .isActive(true)
+                    .build(), "admin@company.com");
+            if (i == 1) {
+                firstBanner = created;
+            }
+        }
+        assertNotNull(firstBanner);
+        final BannerDto targetBanner = firstBanner;
+
+        UpdateBannerRequest updateReq = UpdateBannerRequest.builder()
+                .title("Updated Title for Banner 1")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .isActive(true)
+                .version(targetBanner.getVersion())
+                .build();
+
+        BannerDto updated = assertDoesNotThrow(() ->
+                bannerService.updateBanner(targetBanner.getId(), updateReq, "admin@company.com")
+        );
+        assertEquals("Updated Title for Banner 1", updated.getTitle());
+    }
+
+    @Test
+    @DisplayName("Sanitizer handles nested, unclosed, or malformed script tags cleanly")
+    void testSanitizeText_NestedUnclosedOrMalformedScriptTag() {
+        LocalDateTime now = LocalDateTime.now();
+
+        // Nested script attack: <scr<script>ipt>alert(1)</script>Hello -> strips script, retains "Hello"
+        CreateBannerRequest nestedScriptReq = CreateBannerRequest.builder()
+                .title("<scr<script>ipt>alert(1)</script>Hello")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build();
+
+        BannerDto nestedResult = bannerService.createBanner(nestedScriptReq, "admin@company.com");
+        assertEquals("Hello", nestedResult.getTitle());
+
+        // Unclosed script attack: <script src='http://evil.com/x.js'> -> becomes empty -> rejected
+        CreateBannerRequest unclosedScriptReq = CreateBannerRequest.builder()
+                .title("<script src='http://evil.com/x.js'>")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () ->
+                bannerService.createBanner(unclosedScriptReq, "admin@company.com")
+        );
+    }
 }

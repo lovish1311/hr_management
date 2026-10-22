@@ -45,6 +45,21 @@ public class BannerControllerTest {
     private BannerRepository bannerRepository;
 
     @Autowired
+    private com.example.hr_management_backend.features.employees.repository.EmployeeRepository employeeRepository;
+
+    @Autowired
+    private com.example.hr_management_backend.features.employees.repository.EmployeeAuthorityRepository employeeAuthorityRepository;
+
+    @Autowired
+    private com.example.hr_management_backend.core.security.JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    @Autowired
+    private com.example.hr_management_backend.core.security.JwtUtils jwtUtils;
+
+    @Autowired
+    private org.springframework.cache.CacheManager cacheManager;
+
+    @Autowired
     private ObjectMapper objectMapper;
 
     private MockMvc mockMvc;
@@ -53,6 +68,12 @@ public class BannerControllerTest {
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(bannerController).build();
         bannerRepository.deleteAll();
+        if (cacheManager.getCache("user_authorities") != null) {
+            cacheManager.getCache("user_authorities").clear();
+        }
+        if (cacheManager.getCache("banner_candidates") != null) {
+            cacheManager.getCache("banner_candidates").clear();
+        }
     }
 
     @AfterEach
@@ -200,8 +221,150 @@ public class BannerControllerTest {
                 .employeeId(1L)
                 .build();
 
-        ResponseEntity<List<BannerDto>> response = bannerController.getActiveBanners(principal);
+        ResponseEntity<List<BannerDto>> response = bannerController.getActiveBanners(null, principal);
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
+    }
+
+    @Test
+    @DisplayName("Department filter IDOR prevention: regular employee cannot spoof other department banners")
+    void testDepartmentFilter_IDOR_PreventionOnController() {
+        LocalDateTime now = LocalDateTime.now();
+
+        // 1. Create banners: one for ENGINEERING, one for EXECUTIVE
+        bannerRepository.save(com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("Engineering Tech Talk")
+                .targetDepartment("ENGINEERING")
+                .category(BannerCategory.OFFICE_EVENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .isActive(true)
+                .version(0L)
+                .build());
+
+        bannerRepository.save(com.example.hr_management_backend.features.banners.model.Banner.builder()
+                .title("Executive Compensation Review")
+                .targetDepartment("EXECUTIVE")
+                .category(BannerCategory.ANNOUNCEMENT)
+                .startDate(now.minusHours(1))
+                .expiryDate(now.plusDays(2))
+                .isActive(true)
+                .version(0L)
+                .build());
+
+        // 2. Create Engineering employee
+        com.example.hr_management_backend.features.employees.model.Employee dev =
+                employeeRepository.save(com.example.hr_management_backend.features.employees.model.Employee.builder()
+                        .firstName("Dev")
+                        .lastName("Engineer")
+                        .email("dev.engineer@company.com")
+                        .department("ENGINEERING")
+                        .role("EMPLOYEE")
+                        .systemRole("NONE")
+                        .build());
+
+        UserPrincipal regularEmployeePrincipal = UserPrincipal.builder()
+                .id(dev.getId())
+                .employeeId(dev.getId())
+                .email(dev.getEmail())
+                .role("EMPLOYEE")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE")))
+                .build();
+
+        // Employee attempts IDOR attack by requesting ?department=EXECUTIVE
+        ResponseEntity<List<BannerDto>> empResponse =
+                bannerController.getActiveBanners("EXECUTIVE", regularEmployeePrincipal);
+
+        assertEquals(HttpStatus.OK, empResponse.getStatusCode());
+        assertNotNull(empResponse.getBody());
+        assertEquals(1, empResponse.getBody().size());
+        assertEquals("Engineering Tech Talk", empResponse.getBody().get(0).getTitle());
+        // Verify Executive banner was NOT leaked!
+        assertFalse(empResponse.getBody().stream().anyMatch(b -> "Executive Compensation Review".equals(b.getTitle())));
+
+        // 3. Privileged Admin request CAN preview EXECUTIVE
+        UserPrincipal adminPrincipal = UserPrincipal.builder()
+                .id(999L)
+                .email("admin@company.com")
+                .role("ADMIN")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_ADMIN")))
+                .build();
+
+        ResponseEntity<List<BannerDto>> adminResponse =
+                bannerController.getActiveBanners("EXECUTIVE", adminPrincipal);
+
+        assertEquals(HttpStatus.OK, adminResponse.getStatusCode());
+        assertNotNull(adminResponse.getBody());
+        assertEquals(1, adminResponse.getBody().size());
+        assertEquals("Executive Compensation Review", adminResponse.getBody().get(0).getTitle());
+    }
+
+    @Test
+    @DisplayName("Revoking BANNER_MANAGE authority takes effect immediately in JwtAuthenticationFilter without waiting for JWT expiry")
+    void testRevokeBannerManageAuthority_ImmediatelyBlocksAccess() throws Exception {
+        // 1. Create employee in DB
+        com.example.hr_management_backend.features.employees.model.Employee emp =
+                employeeRepository.save(com.example.hr_management_backend.features.employees.model.Employee.builder()
+                        .firstName("Banner")
+                        .lastName("Delegate")
+                        .email("delegate@company.com")
+                        .department("MARKETING")
+                        .role("EMPLOYEE")
+                        .systemRole("NONE")
+                        .build());
+
+        // 2. Initially grant BANNER_MANAGE in DB
+        com.example.hr_management_backend.features.employees.model.EmployeeAuthority auth =
+                employeeAuthorityRepository.save(com.example.hr_management_backend.features.employees.model.EmployeeAuthority.builder()
+                        .employeeId(emp.getId())
+                        .authority("BANNER_MANAGE")
+                        .grantedBy("admin@company.com")
+                        .build());
+
+        // 3. Issue a JWT containing BANNER_MANAGE baked into claims
+        UserPrincipal principalWithPerm = UserPrincipal.builder()
+                .id(emp.getId())
+                .employeeId(emp.getId())
+                .email(emp.getEmail())
+                .role("EMPLOYEE")
+                .authorities(List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE"), new SimpleGrantedAuthority("BANNER_MANAGE")))
+                .build();
+
+        UsernamePasswordAuthenticationToken authToken =
+                new UsernamePasswordAuthenticationToken(principalWithPerm, null, principalWithPerm.getAuthorities());
+        String jwtToken = jwtUtils.generateJwtToken(authToken);
+
+        // Verify that with authority in DB, request authenticates with BANNER_MANAGE
+        org.springframework.mock.web.MockHttpServletRequest req1 = new org.springframework.mock.web.MockHttpServletRequest();
+        req1.addHeader("Authorization", "Bearer " + jwtToken);
+        org.springframework.mock.web.MockHttpServletResponse res1 = new org.springframework.mock.web.MockHttpServletResponse();
+        org.springframework.mock.web.MockFilterChain chain1 = new org.springframework.mock.web.MockFilterChain();
+
+        jwtAuthenticationFilter.doFilter(req1, res1, chain1);
+        var auth1 = SecurityContextHolder.getContext().getAuthentication();
+        assertNotNull(auth1);
+        assertTrue(auth1.getAuthorities().stream().anyMatch(a -> "BANNER_MANAGE".equals(a.getAuthority())));
+
+        // 4. NOW REVOKE BANNER_MANAGE FROM DB & EVICT CACHE
+        employeeAuthorityRepository.delete(auth);
+        if (cacheManager.getCache("user_authorities") != null) {
+            cacheManager.getCache("user_authorities").evict(emp.getId());
+        }
+        SecurityContextHolder.clearContext();
+
+        // 5. Incoming request with the SAME unexpired JWT token
+        org.springframework.mock.web.MockHttpServletRequest req2 = new org.springframework.mock.web.MockHttpServletRequest();
+        req2.addHeader("Authorization", "Bearer " + jwtToken);
+        org.springframework.mock.web.MockHttpServletResponse res2 = new org.springframework.mock.web.MockHttpServletResponse();
+        org.springframework.mock.web.MockFilterChain chain2 = new org.springframework.mock.web.MockFilterChain();
+
+        jwtAuthenticationFilter.doFilter(req2, res2, chain2);
+        var auth2 = SecurityContextHolder.getContext().getAuthentication();
+        assertNotNull(auth2);
+
+        // Security check: BANNER_MANAGE must be stripped! Only ROLE_EMPLOYEE remains!
+        assertTrue(auth2.getAuthorities().stream().anyMatch(a -> "ROLE_EMPLOYEE".equals(a.getAuthority())));
+        assertFalse(auth2.getAuthorities().stream().anyMatch(a -> "BANNER_MANAGE".equals(a.getAuthority())),
+                "Revoked BANNER_MANAGE authority must not persist from static JWT claims!");
     }
 }

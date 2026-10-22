@@ -30,22 +30,36 @@ public class BannerController {
     /**
      * Public active banner feed for all authenticated employees.
      * Evaluates active date window and matches employee's department.
+     * Prevents IDOR department snooping: regular employees cannot override department via query params.
+     * Only privileged roles (ADMIN, SUPER_ADMIN, or BANNER_MANAGE) can preview other departments via ?department=...
      */
     @GetMapping("/active")
-    public ResponseEntity<List<BannerDto>> getActiveBanners(@AuthenticationPrincipal UserPrincipal principal) {
-        String department = null;
-        if (principal != null) {
+    public ResponseEntity<List<BannerDto>> getActiveBanners(
+            @RequestParam(required = false) String department,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        String effectiveDepartment = null;
+        if (isPrivileged(principal) && department != null && !department.isBlank()) {
+            effectiveDepartment = department.trim();
+        } else if (principal != null) {
             if (principal.getEmployeeId() != null) {
-                department = employeeRepository.findById(principal.getEmployeeId())
+                effectiveDepartment = employeeRepository.findById(principal.getEmployeeId())
                         .map(Employee::getDepartment)
                         .orElse(null);
             } else if (principal.getEmail() != null) {
-                department = employeeRepository.findByEmail(principal.getEmail())
+                effectiveDepartment = employeeRepository.findByEmail(principal.getEmail())
                         .map(Employee::getDepartment)
                         .orElse(null);
             }
         }
-        return ResponseEntity.ok(bannerService.getActiveBanners(department));
+        return ResponseEntity.ok(bannerService.getActiveBanners(effectiveDepartment));
+    }
+
+    private boolean isPrivileged(UserPrincipal principal) {
+        if (principal == null || principal.getAuthorities() == null) return false;
+        return principal.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equalsIgnoreCase(a.getAuthority())
+                        || "ROLE_SUPER_ADMIN".equalsIgnoreCase(a.getAuthority())
+                        || "BANNER_MANAGE".equalsIgnoreCase(a.getAuthority()));
     }
 
     /**

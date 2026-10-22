@@ -13,6 +13,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @SpringBootApplication
 public class HrManagementApplication {
 
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"));
+    }
+
     public static void main(String[] args) {
         com.example.hr_management_backend.core.config.DotenvLoader.load();
         SpringApplication.run(HrManagementApplication.class, args);

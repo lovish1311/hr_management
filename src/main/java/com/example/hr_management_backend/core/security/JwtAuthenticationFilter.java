@@ -45,17 +45,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     String role = jwtUtils.getClaimString(jwt, "role");
                     String systemRole = jwtUtils.getClaimString(jwt, "systemRole");
 
-                    java.util.Set<String> mergedAuths = new java.util.LinkedHashSet<>(authStrings);
+                    java.util.Set<String> resolvedAuths = new java.util.LinkedHashSet<>();
+                    for (String a : authStrings) {
+                        if (a != null && a.startsWith("ROLE_")) {
+                            resolvedAuths.add(a.trim());
+                        }
+                    }
+
                     if (employeeId != null) {
                         try {
                             java.util.List<String> dynamicAuths = userDetailsService.getDynamicAuthorities(employeeId);
-                            if (dynamicAuths != null && !dynamicAuths.isEmpty()) {
-                                mergedAuths.addAll(dynamicAuths);
+                            if (dynamicAuths != null) {
+                                for (String da : dynamicAuths) {
+                                    if (da != null && !da.isBlank()) {
+                                        resolvedAuths.add(da.trim().toUpperCase());
+                                    }
+                                }
                             }
                         } catch (Exception ignored) {}
+                    } else {
+                        resolvedAuths.addAll(authStrings);
                     }
 
-                    authorities = mergedAuths.stream()
+                    authorities = resolvedAuths.stream()
                             .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
                             .collect(java.util.stream.Collectors.toList());
 

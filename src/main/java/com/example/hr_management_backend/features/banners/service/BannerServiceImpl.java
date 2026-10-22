@@ -28,7 +28,10 @@ import java.util.regex.Pattern;
 public class BannerServiceImpl implements BannerService {
 
     private static final int MAX_ACTIVE_BANNERS_LIMIT = 15;
-    private static final Pattern SCRIPT_STYLE_PATTERN = Pattern.compile("<(script|style)[^>]*>.*?</\\1>", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern SCRIPT_BLOCK_PATTERN = Pattern.compile("<(script|style)[^>]*>.*?(</(script|style)>|$)", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern NESTED_SCRIPT_PATTERN = Pattern.compile("<\\s*sc?r?i?p?t?<\\s*/?\\s*script[^>]*>[a-z]*>?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern SCRIPT_TAG_PATTERN = Pattern.compile("<\\s*/?\\s*(script|style)[^>]*>", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DANGLING_SCRIPT_PATTERN = Pattern.compile("<\\s*(script|style).*$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<[^>]*>");
     private static final Pattern VALID_HTTP_URL = Pattern.compile("^(https?://[\\w\\-._~:/?#\\[\\]@!$&'()*+,;=]+)?$", Pattern.CASE_INSENSITIVE);
 
@@ -41,11 +44,38 @@ public class BannerServiceImpl implements BannerService {
 
     /**
      * Cache active candidate pool (where expiryDate >= NOW).
+     * Returns detached unmodifiable snapshot instances to prevent concurrent thread mutation of cached entities.
      * Intra-class invocation via @Lazy self ensures Spring AOP Caffeine caching proxy intercept.
      */
     @Cacheable(value = "banner_candidates", key = "'all'")
     public List<Banner> getCandidateBanners() {
-        return bannerRepository.findActiveCandidates(LocalDateTime.now());
+        List<Banner> candidates = bannerRepository.findActiveCandidates(LocalDateTime.now());
+        return List.copyOf(candidates.stream()
+                .map(this::cloneBannerSnapshot)
+                .toList());
+    }
+
+    private Banner cloneBannerSnapshot(Banner b) {
+        return Banner.builder()
+                .id(b.getId())
+                .title(b.getTitle())
+                .subtitle(b.getSubtitle())
+                .category(b.getCategory())
+                .imageUrl(b.getImageUrl())
+                .actionUrl(b.getActionUrl())
+                .actionButtonText(b.getActionButtonText())
+                .backgroundGradient(b.getBackgroundGradient())
+                .targetDepartment(b.getTargetDepartment())
+                .startDate(b.getStartDate())
+                .expiryDate(b.getExpiryDate())
+                .displayOrder(b.getDisplayOrder())
+                .isActive(b.getIsActive())
+                .createdById(b.getCreatedById())
+                .createdByEmail(b.getCreatedByEmail())
+                .createdAt(b.getCreatedAt())
+                .updatedAt(b.getUpdatedAt())
+                .version(b.getVersion())
+                .build();
     }
 
     @Override
@@ -84,10 +114,15 @@ public class BannerServiceImpl implements BannerService {
     public BannerDto createBanner(CreateBannerRequest request, String actorEmail) {
         validateDates(request.getStartDate(), request.getExpiryDate());
 
-        long activeCount = bannerRepository.countByIsActiveTrueAndExpiryDateGreaterThanEqual(LocalDateTime.now());
-        if (activeCount >= MAX_ACTIVE_BANNERS_LIMIT) {
-            throw new IllegalStateException("Maximum limit of " + MAX_ACTIVE_BANNERS_LIMIT +
-                    " active banners reached. Please expire or deactivate existing banners before creating new ones.");
+        String cleanTitle = sanitizeText(request.getTitle());
+        if (cleanTitle == null || cleanTitle.isBlank()) {
+            throw new IllegalArgumentException("Banner title cannot be empty or contain only HTML tags.");
+        }
+
+        boolean willBeActive = (request.getIsActive() == null || Boolean.TRUE.equals(request.getIsActive()))
+                && !request.getExpiryDate().isBefore(LocalDateTime.now());
+        if (willBeActive) {
+            checkActiveBannerCap();
         }
 
         Long actorEmpId = null;
@@ -98,7 +133,7 @@ public class BannerServiceImpl implements BannerService {
         }
 
         Banner banner = Banner.builder()
-                .title(sanitizeText(request.getTitle()))
+                .title(cleanTitle)
                 .subtitle(sanitizeText(request.getSubtitle()))
                 .category(request.getCategory())
                 .imageUrl(sanitizeUrl(request.getImageUrl()))
@@ -126,6 +161,11 @@ public class BannerServiceImpl implements BannerService {
     public BannerDto updateBanner(Long id, UpdateBannerRequest request, String actorEmail) {
         validateDates(request.getStartDate(), request.getExpiryDate());
 
+        String cleanTitle = sanitizeText(request.getTitle());
+        if (cleanTitle == null || cleanTitle.isBlank()) {
+            throw new IllegalArgumentException("Banner title cannot be empty or contain only HTML tags.");
+        }
+
         Banner banner = bannerRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Banner not found with id: " + id));
 
@@ -133,7 +173,17 @@ public class BannerServiceImpl implements BannerService {
             throw new ObjectOptimisticLockingFailureException(Banner.class, id);
         }
 
-        banner.setTitle(sanitizeText(request.getTitle()));
+        LocalDateTime now = LocalDateTime.now();
+        boolean wasActive = Boolean.TRUE.equals(banner.getIsActive()) && !banner.getExpiryDate().isBefore(now);
+        boolean willBeActive = (request.getIsActive() != null ? Boolean.TRUE.equals(request.getIsActive()) : Boolean.TRUE.equals(banner.getIsActive()))
+                && !request.getExpiryDate().isBefore(now);
+
+        // Enforce active banner cap only when activating an inactive or expired banner
+        if (!wasActive && willBeActive) {
+            checkActiveBannerCap();
+        }
+
+        banner.setTitle(cleanTitle);
         banner.setSubtitle(sanitizeText(request.getSubtitle()));
         banner.setCategory(request.getCategory());
         banner.setImageUrl(sanitizeUrl(request.getImageUrl()));
@@ -177,10 +227,23 @@ public class BannerServiceImpl implements BannerService {
                 .orElseThrow(() -> new ResourceNotFoundException("Banner not found with id: " + id));
 
         boolean newStatus = !Boolean.TRUE.equals(banner.getIsActive());
+        LocalDateTime now = LocalDateTime.now();
+        if (newStatus && (banner.getExpiryDate() == null || !banner.getExpiryDate().isBefore(now))) {
+            checkActiveBannerCap();
+        }
+
         banner.setIsActive(newStatus);
         Banner saved = bannerRepository.save(banner);
         log.info("Banner status toggled to {}: id={}, actor={}", newStatus, id, actorEmail);
         return mapToDto(saved);
+    }
+
+    private void checkActiveBannerCap() {
+        long activeCount = bannerRepository.countByIsActiveTrueAndExpiryDateGreaterThanEqual(LocalDateTime.now());
+        if (activeCount >= MAX_ACTIVE_BANNERS_LIMIT) {
+            throw new IllegalStateException("Maximum limit of " + MAX_ACTIVE_BANNERS_LIMIT +
+                    " active banners reached. Please expire or deactivate existing banners before activating new ones.");
+        }
     }
 
     private boolean matchesDepartment(String bannerDept, String userDept) {
@@ -204,10 +267,23 @@ public class BannerServiceImpl implements BannerService {
 
     private String sanitizeText(String text) {
         if (text == null) return null;
-        // Strip entire <script>...</script> and <style>...</style> blocks along with their contents
-        String withoutScripts = SCRIPT_STYLE_PATTERN.matcher(text).replaceAll("");
-        // Strip remaining HTML tags while preserving text, quotes, and unicode emojis for Flutter
-        String cleaned = HTML_TAG_PATTERN.matcher(withoutScripts).replaceAll("").trim();
+        String current = text;
+        String previous;
+        int iterations = 0;
+        do {
+            previous = current;
+            // 1. Unfold nested script trickery like <scr<script>ipt> into standard <script>
+            current = NESTED_SCRIPT_PATTERN.matcher(current).replaceAll("<script>");
+            // 2. Strip entire script/style blocks along with their code contents
+            current = SCRIPT_BLOCK_PATTERN.matcher(current).replaceAll("");
+            // 3. Strip any unclosed dangling script/style tag to the end of string
+            current = DANGLING_SCRIPT_PATTERN.matcher(current).replaceAll("");
+            // 4. Strip any standalone script/style opening or closing tags
+            current = SCRIPT_TAG_PATTERN.matcher(current).replaceAll("");
+            iterations++;
+        } while (!current.equals(previous) && iterations < 5);
+
+        String cleaned = HTML_TAG_PATTERN.matcher(current).replaceAll("").trim();
         return cleaned.isEmpty() ? null : cleaned;
     }
 
